@@ -174,7 +174,7 @@ export function AppContainer() {
     // 加载页面
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
+            <div className="min-h-dvh flex items-center justify-center bg-background">
                 <Logo size={120} animate />
             </div>
         );
@@ -205,7 +205,7 @@ export function AppContainer() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="mx-auto flex h-dvh max-w-6xl flex-col overflow-hidden px-3 md:grid md:grid-cols-[auto_1fr] md:gap-6 md:px-6"
+            className="mx-auto flex h-dvh max-w-6xl flex-col overflow-hidden px-3 pt-safe pl-safe pr-safe md:grid md:grid-cols-[auto_1fr] md:gap-6 md:px-6"
         >
             <NavBar />
             <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
@@ -236,7 +236,7 @@ export function AppContainer() {
                                 transition={{ duration: 0.3 }}
                                 className="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-6"
                             >
-                                <span className="text-3xl font-bold mt-1">{t(activeItem)}</span>
+                                <span className="font-display text-3xl font-bold mt-1 tracking-tight">{t(activeItem)}</span>
                                 {activeItem === 'channel' && <ChannelTabSwitcher />}
                             </motion.div>
                         </AnimatePresence>

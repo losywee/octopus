@@ -204,7 +204,7 @@ export function StatsChart() {
             <header className="px-5 pt-5 pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                     <p className="text-xs text-muted-foreground">{t(`headline.${PERIOD_KEY[period]}`)}</p>
-                    <p className="mt-1 text-4xl md:text-5xl font-semibold tabular-nums tracking-tight">
+                    <p className="font-display mt-1 text-4xl md:text-5xl font-semibold tabular-nums tracking-tight">
                         {hero.value === undefined ? (
                             <span className="text-muted-foreground">—</span>
                         ) : (

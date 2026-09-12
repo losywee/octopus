@@ -48,5 +48,5 @@ export function AnimatedNumber({ value, duration = 800 }: AnimatedNumberProps) {
         maximumFractionDigits: decimalPlaces
     });
 
-    return <span>{formattedValue}</span>;
+    return <span className="tabular-nums">{formattedValue}</span>;
 }

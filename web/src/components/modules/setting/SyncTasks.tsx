@@ -11,6 +11,7 @@ import { useCheckinAllSites, useSiteLastCheckinTime, useSiteLastSyncTime, useSyn
 import { toast } from '@/components/common/Toast';
 import { useSettingStore } from '@/stores/setting';
 import { translateSiteMessage } from '@/components/modules/site/site-message';
+import { formatSafeDateTime } from '@/lib/date';
 import { SettingCard, useSettingField } from './shared';
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -86,11 +87,7 @@ export function SettingSyncTasks() {
     const { data: lastSiteCheckinTime } = useSiteLastCheckinTime();
 
     const formatTime = (timeStr: string | undefined) => {
-        if (!timeStr) return t('syncTasks.never');
-        const date = new Date(timeStr);
-        if (Number.isNaN(date.getTime())) return t('syncTasks.never');
-        if (date.getFullYear() === 1) return t('syncTasks.never');
-        return date.toLocaleString();
+        return formatSafeDateTime(timeStr, t('syncTasks.never'));
     };
 
     return (

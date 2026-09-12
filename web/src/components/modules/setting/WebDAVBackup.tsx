@@ -16,6 +16,7 @@ import {
     useSettingValue,
 } from '@/api/endpoints/setting';
 import { SettingCard, SettingRow, SettingSection, useSettingField, useSettingToggle } from './shared';
+import { formatSafeDateTime } from '@/lib/date';
 
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -223,7 +224,7 @@ export function SettingWebDAVBackup() {
                                         <div className="min-w-0 flex-1">
                                             <div className="truncate font-mono text-xs">{backup.name}</div>
                                             <div className="text-xs text-muted-foreground">
-                                                {formatBytes(backup.size)} &middot; {new Date(backup.modified_at).toLocaleString()}
+                                                {formatBytes(backup.size)} &middot; {formatSafeDateTime(backup.modified_at)}
                                             </div>
                                         </div>
                                         <Button

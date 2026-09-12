@@ -8,6 +8,7 @@ import type {
     SiteModelRouteSource,
     SiteModelRouteType,
 } from '@/api/endpoints/site-channel';
+import { formatSafeDateTime } from '@/lib/date';
 
 export type PendingCompletionKeyItem = {
     site_id: number;
@@ -385,9 +386,7 @@ export function buildPasteSourceKeyPayload(
 
 export function formatHistoryTime(value?: number | null) {
     if (!value) return '\u4ece\u672a\u8bf7\u6c42';
-    const date = new Date(value * 1000);
-    if (Number.isNaN(date.getTime())) return '\u4ece\u672a\u8bf7\u6c42';
-    return date.toLocaleString();
+    return formatSafeDateTime(value * 1000, '\u4ece\u672a\u8bf7\u6c42');
 }
 
 export function summarizeHistory(history?: SiteModelHistorySummary | null) {

@@ -15,6 +15,7 @@ import { useSiteChannelList } from '@/api/endpoints/site-channel';
 import { SettingKey, useSettingValue } from '@/api/endpoints/setting';
 import { useToolbarViewOptionsStore } from '@/components/modules/toolbar/view-options-store';
 import { useSearchStore } from '@/components/modules/toolbar/search-store';
+import { parseSafeDate } from '@/lib/date';
 
 type ChannelEntry = {
     id: number;
@@ -29,7 +30,7 @@ type ChannelGroup = {
 
 function unixToDate(value: number | undefined) {
     if (!value) return undefined;
-    return new Date(value * 1000);
+    return parseSafeDate(value * 1000) ?? undefined;
 }
 
 function formatDateTime(value: number | undefined) {

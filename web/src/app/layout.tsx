@@ -1,3 +1,5 @@
+import type { Metadata, Viewport } from "next";
+import { Bricolage_Grotesque, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/provider/theme";
 import { Toaster } from "@/components/ui/sonner"
@@ -6,7 +8,45 @@ import QueryProvider from "@/provider/query";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { TooltipProvider } from "@/components/animate-ui/components/animate/tooltip";
 
+// Display face for headings/hero numbers; Plex Mono for data/code accents.
+// Both are self-hosted by Next at build time (works offline after export).
+const displayFont = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-bricolage",
+  display: "swap",
+});
+const monoFont = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eae9e3" },
+    { media: "(prefers-color-scheme: dark)", color: "#413a2c" },
+  ],
+};
+
+export const metadata: Metadata = {
+  title: "Octopus",
+  applicationName: "Octopus",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Octopus",
+  },
+  icons: {
+    icon: "./favicon.ico",
+    apple: "./apple-icon.png",
+  },
+  manifest: "./manifest.json",
+};
 
 export default function RootLayout({
   children,
@@ -21,18 +61,6 @@ export default function RootLayout({
             __html: `(function(){try{var s=localStorage.getItem('octopus-settings');if(!s)return;var j=JSON.parse(s);var th=j&&j.state&&j.state.colorTheme;if(th&&th!=='default'){document.documentElement.setAttribute('data-color-theme',th);}}catch(e){}})();`,
           }}
         />
-        <meta name="theme-color" content="#eae9e3" />
-        <meta name="application-name" content="Octopus" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-        <meta name="apple-mobile-web-app-title" content="Octopus" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="mobile-web-app-status-bar-style" content="black" />
-        <meta name="mobile-web-app-title" content="Octopus" />
-        <link rel="manifest" href="./manifest.json" />
-        <link rel="icon" href="./favicon.ico" sizes="any" />
-        <link rel="apple-touch-icon" href="./apple-icon.png" />
-        <title>Octopus</title>
         <style
           dangerouslySetInnerHTML={{
             __html: `
@@ -43,8 +71,8 @@ export default function RootLayout({
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: hsl(var(--background));
-                color: hsl(var(--primary));
+                background: var(--background);
+                color: var(--primary);
                 transition: opacity 200ms ease;
               }
               #initial-loader.octo-hide {
@@ -98,7 +126,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">
+      <body className={`${displayFont.variable} ${monoFont.variable} antialiased`}>
         <div id="initial-loader" role="status" aria-label="Loading">
           <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
             <g className="octo-group">

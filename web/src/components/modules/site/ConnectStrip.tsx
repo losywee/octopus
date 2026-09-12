@@ -10,6 +10,7 @@ import { useNavStore } from '@/components/modules/navbar';
 import { useChannelTabStore } from '@/components/modules/channel/tab-store';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { parseSafeDate } from '@/lib/date';
 
 const STEPS = [
     { id: 1, title: '添加站点账号', hint: 'Access Token / 管理凭证', icon: Globe2 },
@@ -20,8 +21,8 @@ const STEPS = [
 
 function formatRuntimeTime(value?: string | null) {
     if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
+    const date = parseSafeDate(value);
+    if (!date) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 

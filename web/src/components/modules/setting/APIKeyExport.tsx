@@ -229,7 +229,7 @@ export function APIKeyExportOverlay({
                 aria-modal="true"
                 aria-labelledby={titleId}
                 data-slot="dialog-content"
-                className="fixed left-1/2 top-1/2 z-50 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 bg-card p-5 rounded-3xl border border-border max-h-[80vh] overflow-auto"
+                className="fixed left-1/2 top-1/2 z-50 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 bg-card p-5 rounded-3xl border border-border max-h-[80dvh] overflow-auto touch-scroll overscroll-contain"
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             >
                 <h3 id={titleId} className="text-sm font-semibold text-card-foreground line-clamp-1 mb-3">

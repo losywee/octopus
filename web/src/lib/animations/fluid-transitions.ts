@@ -34,34 +34,36 @@ export const SPRING = {
  * 磁性吸附进入动画
  */
 export const ENTRANCE_VARIANTS = {
-    // 导航栏进入
+    // 导航栏进入 (Avoid CSS filter blur to prevent Safari WebKit compositing bug with backdrop-filter)
     navbar: {
         initial: {
             opacity: 0,
-            scale: 0.2,
-            filter: "blur(10px)",
+            scale: 0.9,
+            y: 12,
         },
         animate: {
             opacity: 1,
             scale: 1,
-            filter: "blur(0px)",
+            y: 0,
             transition: SPRING.smooth,
         },
     } as Variants,
 
-    // 主内容进入
+    // 主内容进入 (Subtle scale to avoid WebKit font blur during transition)
     content: {
         initial: {
-            scale: 0.8,
+            scale: 0.98,
+            y: 8,
             opacity: 0,
         },
         animate: {
             scale: 1,
+            y: 0,
             opacity: 1,
             transition: {
-                duration: 0.5,
+                duration: 0.35,
                 ease: EASING.easeOutExpo,
-                delay: 0.1,
+                delay: 0.05,
             },
         },
     } as Variants,
@@ -69,21 +71,18 @@ export const ENTRANCE_VARIANTS = {
     // 头部进入
     header: {
         initial: {
-            y: 100,
+            y: 16,
             opacity: 0,
-            filter: "blur(10px)",
         },
         animate: {
             y: 0,
             opacity: 1,
-            filter: "blur(0px)",
             transition: {
-                duration: 0.5,
+                duration: 0.4,
                 ease: EASING.easeOutExpo,
-                delay: 0.1,
+                delay: 0.05,
             },
         },
     } as Variants,
-
 };
 

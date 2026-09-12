@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark *, html.dark *));
 
 :root {
+  color-scheme: light;
   --background: oklch(0.9331 0.0081 98.8844);
   --foreground: oklch(0.3514 0.0250 84.4589);
   --card: oklch(0.9891 0.0017 325.5900);
@@ -36,6 +37,7 @@
   --sidebar-accent-foreground: oklch(0.9792 0.0091 150.6929);
   --sidebar-border: oklch(0.8795 0.0142 88.6926);
   --sidebar-ring: oklch(0.6205 0.1199 144.8607);
+  --card-border: color-mix(in oklab, var(--border) 86%, var(--foreground) 14%);
   --radius: 0.5rem;
   --shadow-x: 0;
   --shadow-y: 1px;
@@ -57,6 +59,7 @@
 
 html.dark,
 .dark {
+  color-scheme: dark;
   --background: oklch(0.2809 0.0264 153.4040);
   --foreground: oklch(0.9200 0.0104 81.7947);
   --card: oklch(0.3196 0.0217 150.3385);
@@ -89,6 +92,7 @@ html.dark,
   --sidebar-accent-foreground: oklch(0.2189 0.0281 148.5092);
   --sidebar-border: oklch(0.4006 0.0210 145.1704);
   --sidebar-ring: oklch(0.6990 0.1292 144.8727);
+  --card-border: color-mix(in oklab, var(--border) 78%, var(--foreground) 22%);
   --radius: 0.5rem;
   --shadow-x: 0;
   --shadow-y: 1px;
@@ -817,6 +821,7 @@ html.dark[data-color-theme="violet"],
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-card-border: var(--card-border);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -859,43 +864,223 @@ html.dark[data-color-theme="violet"],
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
+
+  --font-display: var(--font-bricolage), ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   * {
     @apply border-border outline-ring/50;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Prevent automatic viewport zoom on form input focus in iOS Safari */
+  @media screen and (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Safari smooth momentum scrolling for all scroll containers */
+  [class*="overflow-y-auto"],
+  [class*="overflow-x-auto"],
+  [class*="overflow-auto"],
+  [class*="overflow-y-scroll"],
+  [class*="overflow-x-scroll"],
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
   }
 
   body {
     @apply bg-background text-foreground;
     isolation: isolate;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    /* Subtle film grain baked into the page background (Safari-safe: no fixed attachment) */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.05'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 240px 240px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 28%, transparent);
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--ring) 75%, transparent);
+    outline-offset: 2px;
+  }
+
+  /* Honor reduced-motion for pure CSS animation (JS motion animations handle it at runtime) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 
   body::before,
   body::after {
     content: '';
-    position: absolute;
+    position: fixed;
     border-radius: 9999px;
-    filter: blur(40px);
-    opacity: 0.6;
+    filter: blur(28px);
+    -webkit-filter: blur(28px);
+    opacity: 0.5;
     z-index: -1;
+    pointer-events: none;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 
   body::before {
-    width: 300px;
-    height: 300px;
+    width: 320px;
+    height: 320px;
     background: radial-gradient(circle at 30% 20%, oklch(0.68 0.05 150) 0%, transparent 70%);
-    top: 10%;
-    right: 10%;
+    top: 5%;
+    right: 5%;
   }
 
   body::after {
-    width: 250px;
-    height: 250px;
+    width: 280px;
+    height: 280px;
     background: radial-gradient(circle at 60% 40%, oklch(0.82 0.03 200) 0%, transparent 70%);
-    bottom: 10%;
+    bottom: 5%;
     left: 5%;
+  }
+}
+
+@layer utilities {
+  /* Signature card shadow — soft, warm, layered (used across dashboard cards) */
+  .custom-shadow {
+    box-shadow:
+      0 1px 2px 0 rgb(28 25 23 / 0.05),
+      0 8px 24px -10px rgb(28 25 23 / 0.12),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.35);
+  }
+  .dark .custom-shadow {
+    box-shadow:
+      0 1px 2px 0 rgb(0 0 0 / 0.25),
+      0 8px 24px -10px rgb(0 0 0 / 0.4),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+  }
+
+  /* Safari -webkit-backdrop-filter support */
+  .backdrop-blur-none {
+    -webkit-backdrop-filter: blur(0);
+    backdrop-filter: blur(0);
+  }
+  .backdrop-blur-xs {
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .backdrop-blur-sm {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  .backdrop-blur {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  .backdrop-blur-md {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+  .backdrop-blur-lg {
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+  }
+  .backdrop-blur-xl {
+    -webkit-backdrop-filter: blur(32px);
+    backdrop-filter: blur(32px);
+  }
+  .backdrop-blur-2xl {
+    -webkit-backdrop-filter: blur(40px);
+    backdrop-filter: blur(40px);
+  }
+
+  /* Safari hardware acceleration & backdrop filter clipping fix */
+  .glass-surface {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translate3d(0, 0, 0);
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    mask-image: radial-gradient(white, black);
+  }
+
+  /* Cross-browser user-select with WebKit prefix */
+  .select-none {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Safari smooth momentum scrolling */
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* Safe area insets for iOS Safari */
+  .safe-top,
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom,
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-left,
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .safe-right,
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* dvh fallbacks for older Safari versions */
+  @supports not (height: 100dvh) {
+    .h-dvh {
+      height: 100vh;
+    }
+    .min-h-dvh {
+      min-height: 100vh;
+    }
   }
 }

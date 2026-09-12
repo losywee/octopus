@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { formatSafeDateTime } from '@/lib/date';
 import type { SiteSourceKeyFormItem } from './utils';
 import { hasSourceKeyChanges } from './utils';
 
@@ -136,7 +137,7 @@ export function SourceKeysDialog({
                                     </div>
                                     {item.last_sync_at ? (
                                         <div className="mt-2 text-[11px] text-muted-foreground">
-                                            上次同步：{new Date(item.last_sync_at).toLocaleString()}
+                                            上次同步：{formatSafeDateTime(item.last_sync_at)}
                                         </div>
                                     ) : null}
                                 </div>

@@ -58,7 +58,7 @@ export function APIKeyDashboard() {
 
     if (error || !data) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
+            <div className="min-h-dvh flex items-center justify-center">
                 <div className="text-center space-y-4">
                     <p className="text-destructive font-medium">{t('error')}</p>
                     <Button onClick={logout} variant="outline" className="rounded-xl">
@@ -111,7 +111,7 @@ export function APIKeyDashboard() {
             {/* Header - Consistent with app.tsx */}
             <header className="my-6 flex items-center gap-2 px-2">
                 <Logo size={48} />
-                <h1 className="ml-2 flex-1 truncate text-2xl font-bold tracking-tight">octopus</h1>
+                <h1 className="font-display ml-2 flex-1 truncate text-2xl font-bold tracking-tight">octopus</h1>
                 <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" onClick={toggleTheme} className="rounded-xl hover:bg-accent">
                         <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
@@ -135,7 +135,7 @@ export function APIKeyDashboard() {
                             {/* Left: Key Info */}
                             <div className="p-6 md:p-8 flex flex-col relative">
                                 <KeyRound aria-hidden="true" className="pointer-events-none absolute top-6 right-6 h-27 w-27 text-muted-foreground/10" />
-                                <h2 className="text-2xl font-bold truncate pr-16">{info.name}</h2>
+                                <h2 className="font-display text-2xl font-bold truncate pr-16">{info.name}</h2>
                                 <div className="mt-4 flex items-center gap-2 rounded-xl border border-border/50 bg-muted/50 p-3">
                                     <code className="flex-1 font-mono text-sm truncate">
                                         {info.api_key.slice(0, 11)}********{info.api_key.slice(-4)}
@@ -167,7 +167,7 @@ export function APIKeyDashboard() {
                             <div className="relative flex flex-col justify-center border-t bg-muted/30 p-6 md:border-l md:border-t-0 md:p-8">
                                 <Wallet aria-hidden="true" className="pointer-events-none absolute top-6 right-6 h-27 w-27 text-muted-foreground/10" />
                                 <div className="text-lg text-muted-foreground uppercase tracking-wider mb-2">{t('totalCost')}</div>
-                                <div className="text-6xl font-bold text-chart-1">
+                                <div className="font-display text-6xl font-bold text-chart-1 tabular-nums">
                                     <AnimatedNumber value={stats.total_cost.formatted.value} />
                                     <span className="text-lg font-normal text-muted-foreground ml-1">{stats.total_cost.formatted.unit}</span>
                                 </div>

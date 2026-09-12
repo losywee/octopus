@@ -45,7 +45,7 @@ export function AdvancedSettingsDialog({
 
     return (
         <Dialog open={!!group} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-h-[85vh] overflow-y-auto rounded-3xl sm:max-w-4xl">
+            <DialogContent className="max-h-[85dvh] overflow-y-auto rounded-3xl sm:max-w-4xl">
                 <DialogHeader>
                     <DialogTitle className="text-lg font-semibold">{t('siteChannel.advanced.title')}</DialogTitle>
                     <DialogDescription>
@@ -147,7 +147,7 @@ function AdvancedChannelEditor({
                     onChange={(event) => onParamChange(channel.channel_id, event.target.value)}
                     placeholder={t('siteChannel.advanced.paramOverridePlaceholder')}
                     disabled={pending}
-                    className="min-h-40 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-40 rounded-xl border border-border bg-background px-3 py-2 text-base md:text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
             </label>
         </div>

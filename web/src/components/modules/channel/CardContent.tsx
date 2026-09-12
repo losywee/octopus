@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { ChannelForm, type ChannelFormData } from './Form';
 import { formatMoney } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { formatSafeDateTime } from '@/lib/date';
 import { cn } from '@/lib/utils';
 import { useJumpStore } from '@/stores/jump';
 import { useRuntimeOverview } from '@/api/endpoints/runtime';
@@ -227,7 +228,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                 <Tabs value={currentView}>
                     <TabsContents>
                         <TabsContent value="viewing" >
-                            <div className="max-h-[60vh] overflow-y-auto space-y-4 sm:space-y-5">
+                            <div className="max-h-[60dvh] overflow-y-auto space-y-4 sm:space-y-5">
                                 {channel.managed ? (
                                     <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
                                         <div>
@@ -533,7 +534,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {key.last_use_time_stamp > 0 && (
                                                         <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline-block">
-                                                            {new Date(key.last_use_time_stamp * 1000).toLocaleString()}
+                                                            {formatSafeDateTime(key.last_use_time_stamp * 1000)}
                                                         </span>
                                                     )}
 

@@ -36,12 +36,14 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/animate-ui/components/animate/tooltip';
 import { toast } from '@/components/common/Toast';
 import { useUpdateSiteChannelModelDisabled } from '@/api/endpoints/site-channel';
+import { parseSafeDate } from '@/lib/date';
 
 export type LogSiteActionTarget = ApiLogSiteActionTarget;
 export type LogSiteActionTargets = ApiLogSiteActionTargets;
 
 function formatTime(timestamp: number): string {
-    const date = new Date(timestamp * 1000);
+    const date = parseSafeDate(timestamp * 1000);
+    if (!date) return '';
     return date.toLocaleString('zh-CN', {
         month: '2-digit',
         day: '2-digit',
@@ -573,7 +575,8 @@ function AttemptDisableButton({
 function buildLogDiagnosticReport(log: RelayLog): string {
     const lines: string[] = [];
     lines.push(`# Octopus log #${log.id}`);
-    lines.push(`time: ${new Date((log.time || 0) * 1000).toISOString()}`);
+    const logDate = parseSafeDate((log.time || 0) * 1000);
+    lines.push(`time: ${logDate ? logDate.toISOString() : '-'}`);
     lines.push(`model: ${log.request_model_name} -> ${log.actual_model_name || '-'}`);
     lines.push(`channel: ${log.channel_name || log.channel} (#${log.channel})`);
     if (log.request_api_key_name) lines.push(`api_key: ${log.request_api_key_name}`);
@@ -823,7 +826,7 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                 </MorphingDialogTrigger>
 
                 <MorphingDialogContainer>
-                    <MorphingDialogContent className="relative w-[calc(100vw-2rem)] md:w-[80vw] bg-card text-card-foreground px-6 py-4 rounded-3xl h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+                    <MorphingDialogContent className="relative w-[calc(100vw-2rem)] md:w-[80vw] bg-card text-card-foreground px-6 py-4 rounded-3xl h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                         <MorphingDialogClose className="top-4 right-5 text-muted-foreground hover:text-foreground transition-colors" />
                         <MorphingDialogTitle className="mb-3 flex min-w-0 items-start gap-3 pr-14 text-sm md:pr-16">
                             <div className="flex min-w-0 flex-1 items-center gap-2">

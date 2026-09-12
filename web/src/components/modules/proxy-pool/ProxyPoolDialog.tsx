@@ -339,8 +339,8 @@ export function ProxyPoolDialog() {
 
     return (
         <Dialog open={isOpen} onOpenChange={setOpen}>
-            <DialogContent className="max-h-[90vh] overflow-hidden rounded-3xl p-0 sm:max-w-5xl">
-                <div className="grid max-h-[90vh] min-h-[620px] grid-cols-1 overflow-hidden md:grid-cols-[1.1fr_0.9fr]">
+            <DialogContent className="max-h-[90dvh] overflow-hidden rounded-3xl p-0 sm:max-w-5xl">
+                <div className="grid max-h-[90dvh] min-h-[620px] grid-cols-1 overflow-hidden md:grid-cols-[1.1fr_0.9fr]">
                     <section className="flex min-h-0 flex-col border-b md:border-b-0 md:border-r">
                         <DialogHeader className="shrink-0 p-6 pb-3">
                             <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -456,7 +456,7 @@ export function ProxyPoolDialog() {
                 </div>
             </DialogContent>
             <Dialog open={!!referencesProxy} onOpenChange={(open) => !open && setReferencesProxy(null)}>
-                <DialogContent className="max-h-[85vh] overflow-hidden rounded-3xl sm:max-w-2xl">
+                <DialogContent className="max-h-[85dvh] overflow-hidden rounded-3xl sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>{t('referencesTitle')}</DialogTitle>
                         <DialogDescription>

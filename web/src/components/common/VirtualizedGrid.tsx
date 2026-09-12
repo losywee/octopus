@@ -172,11 +172,17 @@ export function VirtualizedGrid<T>({
     }, [onReachEnd, reachEndEnabled, itemRowCount, reachEndOffset, virtualRows, estimateItemHeight, gap]);
 
     // Issue #104: wheel over empty padding / gutters between cards should still scroll.
-    // Nested absolute rows can leave "visual blank" that some browsers attach to a non-scrolling
-    // ancestor; forward wheel to the scrollport when the event isn't from an inner scroller.
+    // When the wheel event originates inside the scroller, allow the browser's native engine
+    // to handle it directly so macOS Safari trackpad momentum, inertia, and rubber-banding
+    // remain completely fluid and stutter-free. Only forward wheel if outside the scroller.
     const handleWheelCapture = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
         const scroller = containerRef.current;
         if (!scroller || event.ctrlKey || event.metaKey) return;
+
+        // Native scrolling in Safari/WebKit handles events inside the scroller with full inertia.
+        if (scroller.contains(event.target as Node)) {
+            return;
+        }
 
         let node = event.target as HTMLElement | null;
         while (node && node !== scroller) {
@@ -216,7 +222,7 @@ export function VirtualizedGrid<T>({
                         clientHeight: target.clientHeight,
                     });
                 } : undefined}
-                className="relative h-full w-full overflow-y-auto overscroll-contain rounded-t-3xl"
+                className="relative h-full w-full overflow-y-auto overscroll-contain rounded-t-3xl touch-scroll"
             >
                 {rowCount === 0 ? null : (
                     <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>

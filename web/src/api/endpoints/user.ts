@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient, setAuthStoreGetter } from '../client';
 import { logger } from '@/lib/logger';
+import { parseSafeDate } from '@/lib/date';
 
 /**
  * 用户登录请求
@@ -96,7 +97,8 @@ export const useAuthStore = create<AuthState>()(
 
                 // API Key 不检查本地过期时间
                 if (!isAPIKeyAuth) {
-                    if (!expireAt || Date.now() >= new Date(expireAt).getTime()) {
+                    const expDate = parseSafeDate(expireAt);
+                    if (!expDate || Date.now() >= expDate.getTime()) {
                         get().logout();
                         return;
                     }

@@ -391,7 +391,7 @@ export function GroupAutoGroupDialogContent() {
     };
 
     return (
-        <div className="flex h-[calc(100vh-2rem)] min-h-0 w-screen max-w-full flex-col overflow-hidden md:max-w-2xl">
+        <div className="flex h-[calc(100dvh-2rem)] min-h-0 w-screen max-w-full flex-col overflow-hidden md:max-w-2xl">
             <MorphingDialogTitle className="shrink-0">
                 <header className="mb-3 flex items-center justify-between gap-4">
                     <h2 className="flex items-center gap-2 text-2xl font-bold text-card-foreground">

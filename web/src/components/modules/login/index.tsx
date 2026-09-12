@@ -68,12 +68,12 @@ export function LoginForm({ onLoginSuccess }: { onLoginSuccess?: () => void }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="min-h-screen flex items-center justify-center px-6 text-foreground"
+      className="min-h-dvh flex items-center justify-center px-6 text-foreground"
     >
       <div className="w-full max-w-sm space-y-8">
         <header className="flex flex-col items-center gap-3">
           <Logo size={48} />
-          <h1 className="text-2xl font-bold">Octopus</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Octopus</h1>
         </header>
 
         <Tabs value={mode} onValueChange={handleModeChange}>

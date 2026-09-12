@@ -161,7 +161,7 @@ export function PublicModelDialog({ open, onOpenChange }: { open: boolean; onOpe
                 onOpenChange(v);
             }}
         >
-            <DialogContent className="flex max-h-[88vh] max-w-4xl flex-col overflow-hidden rounded-3xl">
+            <DialogContent className="flex max-h-[88dvh] max-w-4xl flex-col overflow-hidden rounded-3xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <BookMarked className="size-5" />
@@ -349,7 +349,7 @@ export function PublicModelDialog({ open, onOpenChange }: { open: boolean; onOpe
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="claude-3.5-sonnet"
-                                    className="h-10 rounded-2xl font-mono text-xs"
+                                    className="h-10 rounded-2xl font-mono text-base md:text-xs"
                                 />
                             </label>
                             <label className="grid gap-1.5 text-xs text-muted-foreground">
@@ -358,7 +358,7 @@ export function PublicModelDialog({ open, onOpenChange }: { open: boolean; onOpe
                                     value={aliases}
                                     onChange={(e) => setAliases(e.target.value)}
                                     placeholder={'claude-3-5-sonnet-20241022\nanthropic/claude-3.5-sonnet'}
-                                    className="min-h-28 rounded-2xl border border-border bg-background px-3 py-2 font-mono text-xs"
+                                    className="min-h-28 rounded-2xl border border-border bg-background px-3 py-2 font-mono text-base md:text-xs"
                                 />
                             </label>
                             <label className="grid gap-1.5 text-xs text-muted-foreground">

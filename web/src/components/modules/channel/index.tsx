@@ -154,7 +154,7 @@ export function Channel() {
     ) : null;
 
     return (
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="flex h-full min-h-0 flex-col pb-24 md:pb-4">
             <div className="relative flex-1 min-h-0">
                 <AnimatePresence mode="wait" initial={false}>
                     <motion.div

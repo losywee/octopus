@@ -91,7 +91,7 @@ export function GroupHealthSummaryStrip() {
                 </div>
             </section>
 
-            <DialogContent className="flex h-[min(88vh,52rem)] max-w-[min(1100px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border-border/70 p-0 sm:max-w-[min(1100px,calc(100vw-1.5rem))]">
+            <DialogContent className="flex h-[min(88dvh,52rem)] max-w-[min(1100px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border-border/70 p-0 sm:max-w-[min(1100px,calc(100vw-1.5rem))]">
                 <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
                     <DialogTitle>{t('detailTitle')}</DialogTitle>
                     <DialogDescription>{t('detailDescription')}</DialogDescription>

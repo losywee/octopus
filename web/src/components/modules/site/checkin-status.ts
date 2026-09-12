@@ -3,6 +3,7 @@ import {
   type SiteAccount,
   SitePlatform,
 } from "@/api/endpoints/site";
+import { parseSafeDate } from "@/lib/date";
 
 export type CheckinFilterStatus =
   | "all"
@@ -63,8 +64,8 @@ export function accountIsDisabled(
 
 function happenedToday(value?: string | null, now = new Date()) {
   if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime()) || date.getFullYear() <= 1) {
+  const date = parseSafeDate(value);
+  if (!date || date.getFullYear() <= 1) {
     return false;
   }
 

@@ -204,7 +204,7 @@ function SiteCardImpl({
             </div>
 
             <MorphingDialogContainer>
-                <MorphingDialogContent className="max-w-[min(96vw,92rem)] w-[min(96vw,92rem)] overflow-hidden rounded-[2rem] bg-background max-h-[90vh]">
+                <MorphingDialogContent className="max-w-[min(96vw,92rem)] w-[min(96vw,92rem)] overflow-hidden rounded-[2rem] bg-background max-h-[90dvh]">
                     <SiteChannelDialog
                         card={card}
                         jumpRequest={jumpRequest?.target.siteId === card.site_id ? jumpRequest : null}

@@ -36,6 +36,7 @@ import {
 } from "@/api/endpoints/site";
 import { PageWrapper } from "@/components/common/PageWrapper";
 import { toast } from "@/components/common/Toast";
+import { formatSafeDateTime } from "@/lib/date";
 import {
   Tooltip,
   TooltipContent,
@@ -180,12 +181,7 @@ type SiteImportResult = {
 };
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "从未执行";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime()) || date.getFullYear() <= 1) {
-    return "从未执行";
-  }
-  return date.toLocaleString();
+  return formatSafeDateTime(value, "从未执行");
 }
 
 function statusLabel(status: string) {
@@ -2466,9 +2462,7 @@ export function Site() {
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         归档于{" "}
-                        {site.archived_at
-                          ? new Date(site.archived_at).toLocaleString()
-                          : "-"}
+                        {formatSafeDateTime(site.archived_at, "-")}
                         {" · "}
                         {site.accounts.length} 个账号已保留
                       </div>

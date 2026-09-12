@@ -15,6 +15,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { formatSafeDateTime, formatSafeRelativeTime } from '@/lib/date';
 import { useGroupHealthEnabled } from '@/api/endpoints/setting';
 import {
     useGroupHealthList,
@@ -26,28 +27,11 @@ import {
 } from '@/api/endpoints/group-health';
 
 function formatDateTime(value?: string | null) {
-    if (!value) return 'Never';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'Never';
-    return date.toLocaleString();
+    return formatSafeDateTime(value, 'Never');
 }
 
 function formatRelativeTime(value: string | null | undefined, locale: string, fallback: string) {
-    if (!value) return fallback;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return fallback;
-
-    const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
-    const absSeconds = Math.abs(diffSeconds);
-    const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'always' });
-
-    if (absSeconds < 60) return formatter.format(diffSeconds, 'second');
-    const diffMinutes = Math.round(diffSeconds / 60);
-    if (Math.abs(diffMinutes) < 60) return formatter.format(diffMinutes, 'minute');
-    const diffHours = Math.round(diffMinutes / 60);
-    if (Math.abs(diffHours) < 24) return formatter.format(diffHours, 'hour');
-    const diffDays = Math.round(diffHours / 24);
-    return formatter.format(diffDays, 'day');
+    return formatSafeRelativeTime(value, locale, fallback);
 }
 
 function statusLabel(status?: GroupHealthStatus | null) {
@@ -232,7 +216,7 @@ export function GroupHealthBadge({ groupId }: { groupId?: number }) {
                 </CardContent>
             </Card>
 
-            <DialogContent className="flex h-[min(85vh,42rem)] flex-col overflow-hidden rounded-3xl sm:max-w-2xl">
+            <DialogContent className="flex h-[min(85dvh,42rem)] flex-col overflow-hidden rounded-3xl sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <span className={cn('size-2.5 rounded-full', statusDotTone(latest?.status))} />

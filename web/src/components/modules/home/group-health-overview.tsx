@@ -7,13 +7,11 @@ import { useGroupHealthList, useRunAllGroupHealth, useRunGroupHealth, type Group
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { formatSafeDateTime } from '@/lib/date';
 import { GroupHealthAttemptDetails } from '../group/health';
 
 function formatDateTime(value?: string | null, fallback?: string) {
-    if (!value) return fallback ?? '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return fallback ?? '';
-    return date.toLocaleString();
+    return formatSafeDateTime(value, fallback ?? '');
 }
 
 function statusTone(status?: string | null) {

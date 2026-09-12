@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { parseSafeDate } from '@/lib/date';
 import {
     Select,
     SelectContent,
@@ -189,8 +190,9 @@ function parseTokenExpiresAtInput(value: string) {
         }
         return parsed < 1_000_000_000_000 ? Math.trunc(parsed * 1000) : Math.trunc(parsed);
     }
-    const parsed = Date.parse(trimmed);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    // Safari returns Invalid Date for "YYYY-MM-DD HH:mm:ss" — normalize via parseSafeDate
+    const parsed = parseSafeDate(trimmed)?.getTime();
+    if (!parsed || parsed <= 0) {
         throw new Error('token_expires_at 必须是时间戳或可解析时间');
     }
     return Math.trunc(parsed);
@@ -406,7 +408,7 @@ export function AccountEditDialog({ open, onOpenChange, site, account }: Account
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 showCloseButton={false}
-                className="w-screen max-w-full md:max-w-xl bg-card text-card-foreground px-6 py-4 rounded-3xl flex flex-col gap-0 border-0 sm:max-w-xl max-h-[min(calc(100vh-2rem),52rem)] overflow-hidden"
+                className="w-screen max-w-full md:max-w-xl bg-card text-card-foreground px-6 py-4 rounded-3xl flex flex-col gap-0 border-0 sm:max-w-xl max-h-[min(calc(100dvh-2rem),52rem)] overflow-hidden"
             >
                 <header className="mb-4 flex items-start justify-between gap-4 shrink-0">
                     <div className="min-w-0 flex-1">

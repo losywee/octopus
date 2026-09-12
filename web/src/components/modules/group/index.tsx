@@ -16,6 +16,7 @@ import { CreateDialogContent as GroupCreateContent } from '@/components/modules/
 import { GroupAutoGroupDialogContent } from '@/components/modules/group/AutoGroupDialog';
 import { useNavStore } from '@/components/modules/navbar';
 import { cn } from '@/lib/utils';
+import { parseSafeDate } from '@/lib/date';
 import { inferModelFamily, MODEL_FAMILY_OPTIONS, type ModelFamilyId } from '@/lib/model-family';
 
 export function Group() {
@@ -50,8 +51,8 @@ export function Group() {
         return [...groups].sort((a, b) => {
             if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
             if (a.pinned && b.pinned) {
-                const ta = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
-                const tb = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+                const ta = parseSafeDate(a.pinned_at)?.getTime() ?? 0;
+                const tb = parseSafeDate(b.pinned_at)?.getTime() ?? 0;
                 if (ta !== tb) return tb - ta;
             }
             const diff = sortField === 'name'
@@ -83,14 +84,14 @@ export function Group() {
         <>
             <MorphingDialog open={createOpen} onOpenChange={setCreateOpen}>
                 <MorphingDialogContainer>
-                    <MorphingDialogContent className="flex max-h-[calc(100vh-2rem)] w-fit max-w-full flex-col overflow-hidden rounded-3xl bg-card px-6 py-4 text-card-foreground custom-shadow">
+                    <MorphingDialogContent className="flex max-h-[calc(100dvh-2rem)] w-fit max-w-full flex-col overflow-hidden rounded-3xl bg-card px-6 py-4 text-card-foreground custom-shadow">
                         <GroupCreateContent />
                     </MorphingDialogContent>
                 </MorphingDialogContainer>
             </MorphingDialog>
             <MorphingDialog open={autoGroupOpen} onOpenChange={setAutoGroupOpen}>
                 <MorphingDialogContainer>
-                    <MorphingDialogContent className="flex max-h-[calc(100vh-2rem)] w-fit max-w-full flex-col overflow-hidden rounded-3xl bg-card px-6 py-4 text-card-foreground custom-shadow">
+                    <MorphingDialogContent className="flex max-h-[calc(100dvh-2rem)] w-fit max-w-full flex-col overflow-hidden rounded-3xl bg-card px-6 py-4 text-card-foreground custom-shadow">
                         <GroupAutoGroupDialogContent />
                     </MorphingDialogContent>
                 </MorphingDialogContainer>

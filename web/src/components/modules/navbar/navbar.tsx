@@ -59,7 +59,7 @@ function NavButton({
             {isActive && (
                 <motion.div
                     layoutId="navbar-indicator"
-                    className="absolute inset-0 bg-sidebar-primary rounded-2xl z-0"
+                    className="absolute inset-0 bg-sidebar-primary rounded-2xl z-0 shadow-md"
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 />
             )}
@@ -86,14 +86,14 @@ export function NavBar() {
     }, [])
 
     return (
-        <div className="relative z-50 md:min-h-screen">
+        <div className="relative z-50 md:min-h-dvh">
             <motion.nav
                 aria-label="Main Navigation"
                 className={cn(
-                    "fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 p-3",
+                    "fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 flex items-center gap-1 p-2.5 md:p-3",
                     "md:sticky md:top-30 md:left-auto md:bottom-auto md:translate-x-0 md:flex-col md:gap-3",
-                    "bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-3xl",
-                    "custom-shadow",
+                    "bg-sidebar/85 backdrop-blur-md text-sidebar-foreground border border-sidebar-border/70 rounded-3xl",
+                    "shadow-xl dark:shadow-2xl dark:shadow-black/40",
                 )}
                 variants={ENTRANCE_VARIANTS.navbar}
                 initial="initial"
@@ -131,7 +131,7 @@ export function NavBar() {
                             {advancedActive && (
                                 <motion.div
                                     layoutId="navbar-indicator"
-                                    className="absolute inset-0 bg-sidebar-primary rounded-2xl z-0"
+                                    className="absolute inset-0 bg-sidebar-primary rounded-2xl z-0 shadow-md"
                                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                                 />
                             )}
@@ -144,7 +144,7 @@ export function NavBar() {
                         side={desktop ? "right" : "top"}
                         align="center"
                         sideOffset={12}
-                        className="w-44 rounded-2xl border border-border/70 bg-card p-2 shadow-xl md:data-[side=right]:ml-1"
+                        className="w-44 rounded-2xl border border-border/70 bg-card/95 backdrop-blur-md p-2 shadow-xl md:data-[side=right]:ml-1"
                     >
                         <div className="mb-1 px-2 py-1 text-[11px] font-medium text-muted-foreground">
                             {t("more")}

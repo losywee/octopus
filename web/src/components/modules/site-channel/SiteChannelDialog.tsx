@@ -126,7 +126,7 @@ export function SiteChannelDialog({
     }, [jumpRequest, card.site_id, activeAccountId, onJumpHandled]);
 
     return (
-        <div className="flex h-[88vh] flex-col overflow-hidden">
+        <div className="flex h-[88dvh] flex-col overflow-hidden">
             <header className="flex flex-none items-center gap-2 border-b border-border/70 px-5 py-3 text-left sm:px-6">
                 <MorphingDialogDescription className="sr-only">
                     站点渠道管理面板
