@@ -69,7 +69,7 @@ func streamResponseCompleted(resp *model.InternalLLMResponse) bool {
 	if resp == nil {
 		return false
 	}
-	if len(resp.EmbeddingData) > 0 {
+	if len(resp.EmbeddingData) > 0 || len(resp.RawResponsesOutputItems) > 0 {
 		return true
 	}
 	if len(resp.Choices) == 0 {

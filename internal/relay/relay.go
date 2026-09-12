@@ -451,36 +451,36 @@ func (ra *relayAttempt) attempt() attemptResult {
 	}
 
 	// ====== 失败 ======
+	written := ra.streamPayloadWritten.Load()
+	if written {
+		ra.collectResponse()
+	}
+
+	// Issue #111 / #116: 若流式响应已经完整交付（带 finish_reason 或 content+usage 或 metrics 完整），
+	// 无论后续是因为客户端断连还是上游异常中断，均按成功收口，计费并记录成功。
+	if written && (streamResponseCompleted(ra.metrics.InternalResponse) || metricsSuggestCompletedStream(ra.metrics)) {
+		if statusCode == 0 {
+			statusCode = http.StatusOK
+		}
+		ra.usedKey.StatusCode = statusCode
+		ra.usedKey.TotalCost += ra.metrics.Stats.InputCost + ra.metrics.Stats.OutputCost
+		op.ChannelKeyUpdate(ra.usedKey)
+
+		span.End(dbmodel.AttemptSuccess, statusCode, "")
+
+		op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
+			WaitTime:       span.Duration().Milliseconds(),
+			RequestSuccess: 1,
+		})
+
+		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+
+		log.Debugf("stream complete despite error (%v), treating as success", fwdErr)
+		return attemptResult{Success: true, StatusCode: statusCode}
+	}
+
 	if isClientCancellation(ra.requestContext(), fwdErr) {
-		written := ra.streamPayloadWritten.Load()
-		if written {
-			ra.collectResponse()
-		}
-		// Issue #116: 客户端在完整流（含 finish_reason）送达后立即断连时，上游 EOF
-		// 尚未读到、读侧会收到 context canceled。内容已完整交付，应按成功收口，
-		// 避免 HTTP 200 + 完整 token 却被记为 success=false。
-		if written && streamResponseCompleted(ra.metrics.InternalResponse) {
-			if statusCode == 0 {
-				statusCode = http.StatusOK
-			}
-			ra.usedKey.StatusCode = statusCode
-			ra.usedKey.TotalCost += ra.metrics.Stats.InputCost + ra.metrics.Stats.OutputCost
-			op.ChannelKeyUpdate(ra.usedKey)
-
-			span.End(dbmodel.AttemptSuccess, statusCode, "")
-
-			op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
-				WaitTime:       span.Duration().Milliseconds(),
-				RequestSuccess: 1,
-			})
-
-			balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
-			balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
-
-			log.Debugf("client canceled after complete stream (finish_reason present), treating as success")
-			return attemptResult{Success: true, StatusCode: statusCode}
-		}
-
 		op.ChannelKeyUpdate(ra.usedKey)
 		span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
 		return attemptResult{
@@ -504,10 +504,6 @@ func (ra *relayAttempt) attempt() attemptResult {
 	// 注意：熔断器记录已移至 Handler() 的同通道重试循环外，
 	// 避免重试期间过早触发熔断
 
-	written := ra.streamPayloadWritten.Load()
-	if written {
-		ra.collectResponse()
-	}
 	firstTokenTimeout := isFirstTokenTimeout(nil, fwdErr)
 	return attemptResult{
 		Success:           false,

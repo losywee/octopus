@@ -109,6 +109,13 @@ func TestStreamResponseCompleted(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "raw responses output items count as complete",
+			resp: &transformerModel.InternalLLMResponse{
+				RawResponsesOutputItems: []byte(`[{"id":"item_1"}]`),
+			},
+			want: true,
+		},
 	}
 
 	for _, tc := range cases {

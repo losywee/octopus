@@ -48,7 +48,7 @@ The UI has 7 pages, listed in order of use:
 
 | Page | Purpose |
 |------|---------|
-| **Home** | Cost/request statistics, leaderboard, group health overview |
+| **Home** | Cost/request statistics, rankings by group **and by model**, cache-token metrics, group health overview |
 | **Sites** | Manage relay site accounts, auto-sync + check-in (the main battlefield for aggregation users) |
 | **Channels** | Site channels (auto-projected) + Manual channels (manually added), complete Keys here |
 | **Groups** | **Define external model names**, aggregate channels into one model |
@@ -315,7 +315,8 @@ Relay sites may add new models over time. In the **"Auto-Group Configuration"** 
 
 - **Global Default Mode**: When enabled, all site projected channels use the selected matching method (Off / Fuzzy / Exact / Regex). When enabled, newly synced upstream models are automatically added to matching groups.
 - **Disable Global**: New upstream models require you to manually go to the corresponding group and click "Auto Add".
-- Note: Disabling auto-group for a channel or the global setting **does not delete** existing group members — you must remove them manually.
+- **Declarative reconcile**: When a channel's auto-group rule runs (e.g. during site sync), each matching group is **reconciled**: channel models that match are added, and that channel's existing members that **no longer match** are removed. Changing a group's name or match regex therefore takes effect on the next sync — no manual cleanup needed.
+- **Safe by design**: if the rule can't be applied (e.g. an invalid regex), existing members are left untouched; with auto-group **disabled** for a channel, its members are never touched.
 
 > ⚠️ It **will not** automatically sort all models into groups like Metapi does. You still need to **create groups first** — auto-group only assigns (new) models to **existing** groups.
 
@@ -323,6 +324,8 @@ Relay sites may add new models over time. In the **"Auto-Group Configuration"** 
 
 Enable at **Settings → System → Group Health Check**, then the Home page shows a group health summary, group cards show health status, and you can manually run "Standard Probe / Full Probe".
 (Note: This is a **manually** triggered health check, **not scheduled auto-probing** — most public relay sites prohibit automated probing.)
+
+Channels have a **Skip Health Probe** toggle (channel advanced settings). Enable it for channels you don't want probed — for example pay-per-request direct providers — and they are excluded from group health checks.
 
 ---
 
@@ -338,7 +341,7 @@ Go to **Settings → API Keys → Add Key**:
 | Max Cost | Spending limit for this Key; can be set to "Unlimited" |
 | Expiration Date | Can be set to "Never Expire" |
 | Requests Per Minute (RPM) | Maximum requests per minute for this Key. 0 or empty = no limit; returns HTTP 429 when exceeded |
-| Supported Models | **None selected = unlimited**; selecting specific groups limits the Key to those |
+| Supported Models | With **List Mode = Allow** (default): **none selected = unlimited**, selecting groups whitelists the Key to those. With **List Mode = Deny**: the selected groups are **blocked** and everything else stays allowed |
 | Enabled | — |
 
 > ⚠️ Common pitfall: The "Name" field in the list is for identification. **The actual Key is the `sk-octopus-...` string generated after creation** — don't use the name as your Key.
@@ -412,9 +415,11 @@ Key fields:
 | Channel Type | OpenAI Chat / OpenAI Response / Anthropic / Gemini / Volcengine / OpenAI Embedding |
 | Base URLs | Only the base address — the program auto-appends `/chat/completions`, `/responses`, `/messages`, etc. based on type; multiple endpoints enable "lowest latency selection" |
 | API Key | **Can add multiple Keys** (enabling multi-Key rotation, see FAQ Q6) |
-| Advanced Settings | Custom Headers, channel proxy, parameter override (JSON), auto-sync, auto-group, Responses WS mode, match regex, notes |
+| Advanced Settings | Custom Headers, channel proxy, parameter override (JSON), auto-sync, auto-group, Responses WS mode, match regex, skip health probe, notes |
 
 After adding a manual channel, **you still need to add its models to a group on the Groups page** before it can be used externally.
+
+> 💡 **Fetching the model list**: when the Base URL points at a site root (no version prefix), Octopus probes common layouts — `/models`, `/v1/models`, `/api/v1/models`, `/v1beta/models` — and uses the first one that returns a non-empty list. If all fail, the error names each path it tried, which makes misconfigured Base URLs easy to diagnose.
 
 > 💡 Integration tips:
 > - For Zhipu **CodingPlan**, use a manual channel and select the correct channel type.
@@ -456,7 +461,13 @@ Settings → Passive Outlier Retirement: Based on real request success/failure s
 
 ### 11.4 What Log Cards Show
 
-Each log entry can be expanded to see: error message, **time to first token**, total duration, input/output tokens, cost, **retry details** (each attempt's success/failure/skip/circuit-break), and WS-related markers (passthrough/conversion/continuation/replay/fallback, etc.). Log cards also display **cache tokens** inline (e.g., `R 148K`), making it easy to see how much prompt cache was hit.
+Each log entry can be expanded to see: error message, **time to first token**, total duration, input/output tokens, cost, **retry details** (each attempt's success/failure/skip/circuit-break), and WS-related markers (passthrough/conversion/continuation/replay/fallback, etc.). Log cards also display **cache tokens** inline (e.g., `R 148K`), making it easy to see how much prompt cache was hit. Each entry also records the **client IP** the request came from — useful for shared keys and audit trails.
+
+### 11.5 Relay Behavior Notes (success vs. failure)
+
+- **Client cancel after a finished turn counts as success**: if the upstream stream already reached `finish_reason`, a client disconnect afterwards is recorded as a successful request, not an error. As a fallback for flaky upstreams (some Grok/relay stations) that deliver content and usage but close the SSE without `finish_reason`, "content delivered + usage present" is also treated as complete. Mid-stream cancels with no usable content/usage remain **failures**.
+- **Empty non-stream responses trigger failover**: an upstream 200 with an empty body on a non-streaming request is treated as a failure, so retry/failover can move to the next channel instead of returning an empty answer.
+- **Codex / Responses tolerance**: tool-call `arguments` sent as a JSON object (not only a string) are accepted, `null` content is handled, and malformed request bodies return **HTTP 400** with a clear message instead of a 500.
 
 ---
 
@@ -464,7 +475,7 @@ Each log entry can be expanded to see: error message, **time to first token**, t
 
 | Panel | Key Items |
 |-------|-----------|
-| **System** | Proxy address, **Statistics save interval (minutes)**, CORS whitelist, Responses WebSocket (default mode: passthrough/convert/off), SSE heartbeat, **Group health check** toggle |
+| **System** | Proxy address, **Statistics save interval (minutes)**, CORS whitelist, Responses WebSocket (default mode: passthrough/convert/off), SSE heartbeat, **Group health check** toggle (channels can individually skip probes) |
 | **Circuit Breaker** | Trigger threshold, base cooldown, max cooldown (exponential backoff) |
 | **Passive Outlier Retirement** | Site projected channels only, disabled by default. Includes failure rate / min samples / consecutive failures / window parameters |
 | **Channel Sync** | Auto-sync interval (hours), manual sync |
@@ -472,7 +483,7 @@ Each log entry can be expanded to see: error message, **time to first token**, t
 | **Site Automation** | Site auto-sync interval (hours), auto check-in interval (hours), manual full sync / full check-in |
 | **Log Settings** | Enable history logs, log retention days, clear history logs |
 | **Backup / Restore** | Export (optionally include logs/statistics; logs force ZIP), Import (incremental) |
-| **API Keys** | Create/manage `sk-octopus-*`, supports **per-Key RPM rate limiting** (see [Chapter VIII](#viii-step-4-create-an-api-key-and-connect-clients)) |
+| **API Keys** | Create/manage `sk-octopus-*`, supports **per-Key RPM rate limiting** and **per-Key model allow/deny lists** (see [Chapter VIII](#viii-step-4-create-an-api-key-and-connect-clients)) |
 | **Account Settings** | Change username / password |
 | **Version Info** | Current/latest version, one-click update (backup first before updating) |
 | **Appearance** | Theme (Light/Dark/System), Language |

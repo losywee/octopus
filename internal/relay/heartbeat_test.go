@@ -112,9 +112,9 @@ func TestEarlyHeartbeat_DelayedFirstHeartbeat(t *testing.T) {
 
 	c, w := newTestGinContext(t)
 	hb := startEarlyHeartbeat(c, true)
-	defer hb.Stop()
 
 	time.Sleep(1200 * time.Millisecond)
+	hb.Stop()
 	if !hb.HeaderWritten() {
 		t.Fatal("expected SSE header after delay")
 	}

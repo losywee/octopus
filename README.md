@@ -18,11 +18,12 @@
 - 🔀 **Multi-Channel Aggregation** - Connect multiple LLM provider channels with unified management
 - 🔑 **Multi-Key Support** - Support multiple API keys for a single channel
 - ⚡ **Smart Selection** - Multiple endpoints per channel, smart selection of the endpoint with the shortest delay
-- ⚖️ **Load Balancing** - Automatic request distribution for stable and efficient service
+- ⚖️ **Load Balancing** - Automatic request distribution for stable and efficient service, with a circuit breaker and retry/failover
 - 🔄 **Protocol Conversion** - Seamless conversion between OpenAI Chat / OpenAI Responses / Anthropic API formats
+- 🚫 **Per-Key Model Lists** - Allow (whitelist) or deny (blacklist) model lists for each API key
 - 💰 **Price Sync** - Automatic model pricing updates
-- 🔃 **Model Sync** - Automatic synchronization of available model lists with channels
-- 📊 **Analytics** - Comprehensive request statistics, token consumption, and cost tracking
+- 🔃 **Model Sync** - Automatic synchronization of available model lists with channels, including multi-path `/v1/models` probing for site-root Base URLs
+- 📊 **Analytics** - Comprehensive request statistics, token consumption (incl. cache read/write tokens), cost tracking, client IP logging, and rankings by group or model
 - 🎨 **Elegant UI** - Clean and beautiful web management panel
 - 🗄️ **Multi-Database Support** - Support for SQLite, MySQL, PostgreSQL
 
