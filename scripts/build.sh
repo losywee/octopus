@@ -226,10 +226,17 @@ binary_name() {
     echo "${name}"
 }
 
+# Build tags honoring HEADLESS=1 (no embedded admin UI, 10MB smaller)
+build_tags() {
+    local tags="jsoniter"
+    [ "${HEADLESS:-0}" = "1" ] && tags="${tags} headless"
+    echo "${tags}"
+}
+
 build_standard() {
     local os="$1"
     local arch="$2"
-    local go_arch extra_env output_file
+    local go_arch extra_env output_file tags ldflags
 
     if ! go_arch="$(get_go_arch "${arch}")"; then
         return 1
@@ -237,8 +244,13 @@ build_standard() {
     extra_env="$(get_go_arch_env "${arch}")"
 
     output_file="${OUTPUT_DIR}/bin/$(binary_name "${os}" "${arch}")"
+    tags="$(build_tags)"
+    ldflags="${LDFLAGS}"
+    if [ "${MINIMAL:-0}" = "1" ]; then
+        ldflags="${ldflags} -buildid="
+    fi
 
-    log_info "Building ${os}/${arch}..."
+    log_info "Building ${os}/${arch} (tags: ${tags})..."
 
     # shellcheck disable=SC2086
     if ! env \
@@ -246,7 +258,7 @@ build_standard() {
         GOARCH="${go_arch}" \
         CGO_ENABLED=0 \
         ${extra_env} \
-        go build -trimpath -tags=jsoniter -ldflags="${LDFLAGS}" -o "${output_file}" "${MAIN_DIR}"; then
+        go build -trimpath -tags="${tags}" -ldflags="${ldflags}" -o "${output_file}" "${MAIN_DIR}"; then
         log_error "Failed to build ${os}/${arch}"
         return 1
     fi
@@ -254,6 +266,22 @@ build_standard() {
     if [ ! -f "${output_file}" ]; then
         log_error "Build reported success but output missing: ${output_file}"
         return 1
+    fi
+
+    # Optional final compression (MINIMAL=1); unsupported targets are skipped
+    if [ "${MINIMAL:-0}" = "1" ] && command_exists upx; then
+        case "${os}/${go_arch}" in
+        linux/amd64 | linux/arm64 | darwin/amd64 | darwin/arm64 | windows/amd64)
+            if upx -q --best "${output_file}" >/dev/null 2>&1; then
+                log_success "UPX compressed: $(basename "${output_file}")"
+            else
+                log_warning "UPX compression failed — binary left uncompressed"
+            fi
+            ;;
+        *)
+            log_info "UPX skipped: unsupported target ${os}/${go_arch}"
+            ;;
+        esac
     fi
 
     log_success "Built ${os}/${arch} → bin/$(basename "${output_file}")"
@@ -452,7 +480,8 @@ Usage: $0 <command> [os] [arch]
 
 Commands:
   release              Build all release targets, Docker binaries, archives, checksums
-  build <os> <arch>    Build a single target
+  build <os> <arch>    Build a single target (frontend + price + binary)
+  bin <os> <arch>      Minimal binary-only build (reuses static/out, skips frontend/price)
   version              Print build metadata
   help                 Show this help
 
@@ -463,11 +492,16 @@ Environment:
   JOBS=N            Parallel go builds during release (default: all cores)
   SKIP_FRONTEND=1   Reuse existing static/out (requires a previous full build)
   SKIP_PRICE=1      Skip price preset regeneration
+  HEADLESS=1        (bin only) Exclude the embedded admin UI (-tags headless,
+                    ~10MB smaller; server runs API-only, UI returns 404)
+  MINIMAL=1         Strip build ID; compress with UPX when installed and the
+                    target is supported (linux/amd64|arm64, darwin/*, windows/amd64)
 
 Examples:
   $0 build windows x86_64
   $0 build darwin arm64
   SKIP_FRONTEND=1 $0 build linux x86_64
+  HEADLESS=1 MINIMAL=1 $0 bin linux x86_64
   JOBS=4 SKIP_PRICE=1 $0 release
 EOF
 }
@@ -506,6 +540,42 @@ main() {
         prepare_environment
         build_frontend
         update_price
+        build_standard "$2" "$3"
+
+        log_step "Build completed"
+        log_success "Binary ready: ${OUTPUT_DIR}/bin/$(binary_name "$2" "$3")"
+        ;;
+
+    bin)
+        # Minimal binary-only build: no frontend rebuild, no price update,
+        # no archives. Flags: HEADLESS=1 (no embedded UI), MINIMAL=1 (smaller).
+        if [ $# -ne 3 ]; then
+            log_error "Usage: $0 bin <os> <arch>"
+            show_usage
+            exit 1
+        fi
+        validate_os_arch "$2" "$3" || exit 1
+
+        if ! command_exists go; then
+            log_error "go is required for binary builds"
+            exit 1
+        fi
+
+        local flavor="full"
+        [ "${HEADLESS:-0}" = "1" ] && flavor="headless"
+        [ "${MINIMAL:-0}" = "1" ] && flavor="${flavor} + minimal"
+
+        log_step "Minimal binary build (${flavor})"
+        echo "📦 ${APP_NAME} ${GIT_VERSION} (${COMMIT_ID}) for ${2}/${3}"
+
+        mkdir -p "${OUTPUT_DIR}/bin" "${OUTPUT_DIR}/logs"
+
+        if [ "${HEADLESS:-0}" != "1" ] && [ ! -f "${STATIC_OUT_DIR}/index.html" ]; then
+            log_error "${STATIC_OUT_DIR}/index.html not found (required to embed the UI)"
+            log_error "Run a full build first, use 'build' instead, or pass HEADLESS=1 to skip the UI"
+            exit 1
+        fi
+
         build_standard "$2" "$3"
 
         log_step "Build completed"
