@@ -1,192 +1,124 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Octopus multi-architecture build script.
+#
+# Usage:
+#   scripts/build.sh build <os> <arch>   Build a single target (frontend + binary)
+#   scripts/build.sh release             Build all release targets + archives + checksums
+#   scripts/build.sh version             Print build metadata and exit
+#   scripts/build.sh help                Show help
+#
+# Environment overrides:
+#   JOBS=N            Parallel go builds during release (default: all CPU cores)
+#   SKIP_FRONTEND=1   Reuse existing static/out instead of rebuilding the web app
+#   SKIP_PRICE=1      Skip the model-price preset regeneration (needs network)
+#
+# Targets:
+#   OS:   linux, windows, darwin, android
+#   Arch: x86_64, arm64, armv7, x86
+#
+# Bash 3.2 compatible (macOS ships 3.2; pre-push-check.sh depends on this file).
 
-# Exit on any error, but handle errors gracefully
-set -e
-
-# Enable error trapping
+# Exit on error/unset vars; ERR trap inherited by functions/subshells (-E)
+set -Eeuo pipefail
 trap 'handle_error $? $LINENO' ERR
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-# Project configuration
 readonly APP_NAME="octopus"
-readonly MAIN_DIR="./"
+readonly MAIN_DIR="."
 readonly OUTPUT_DIR="build"
+readonly WEB_DIR="web"
+readonly STATIC_OUT_DIR="static/out"
+readonly MODULE_PATH="github.com/xuanli27/octopus"
 
-# Build metadata
-readonly BUILD_TIME="$(TZ='Asia/Shanghai' date +'%F %T %z')"
+readonly BUILD_TIME="$(date -u +'%F %T %z')"
 readonly GIT_AUTHOR="xuanli27"
 readonly GIT_VERSION="$(git describe --tags --abbrev=0 2>/dev/null || echo 'dev')"
 readonly COMMIT_ID="$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
 
-# Build flags
-readonly LDFLAGS="-X 'github.com/xuanli27/octopus/internal/conf.Version=${GIT_VERSION}' \
-                  -X 'github.com/xuanli27/octopus/internal/conf.BuildTime=${BUILD_TIME}' \
-                  -X 'github.com/xuanli27/octopus/internal/conf.Author=${GIT_AUTHOR}' \
-                  -X 'github.com/xuanli27/octopus/internal/conf.Commit=${COMMIT_ID}' \
-                  -s -w"
+readonly LDFLAGS="-X '${MODULE_PATH}/internal/conf.Version=${GIT_VERSION}' \
+-X '${MODULE_PATH}/internal/conf.BuildTime=${BUILD_TIME}' \
+-X '${MODULE_PATH}/internal/conf.Author=${GIT_AUTHOR}' \
+-X '${MODULE_PATH}/internal/conf.Commit=${COMMIT_ID}' \
+-s -w"
+
+# Release matrix: <os> <arch> pairs
+readonly RELEASE_TARGETS=(
+    "linux x86_64"
+    "linux arm64"
+    "linux armv7"
+    "linux x86"
+    "windows x86_64"
+    "windows arm64"
+    "darwin x86_64"
+    "darwin arm64"
+)
 
 # =============================================================================
-# Utility Functions
+# Logging / error handling
 # =============================================================================
 
-log_info() {
-    echo "ℹ️  $1"
-}
+log_info()    { echo "ℹ️  $1"; }
+log_success() { echo "✅ $1"; }
+log_error()   { echo "❌ $1" >&2; }
+log_warning() { echo "⚠️  $1" >&2; }
+log_step()    { echo ""; echo "🔧 $1"; echo "────────────────────────────────────────"; }
 
-log_success() {
-    echo "✅ $1"
-}
-
-log_error() {
-    echo "❌ $1" >&2
-}
-
-log_warning() {
-    echo "⚠️  $1" >&2
-}
-
-log_step() {
-    echo ""
-    echo "🔧 $1"
-    echo "────────────────────────────────────────"
-}
-
-# Error handling function
 handle_error() {
-    local exit_code=$1
-    local line_number=$2
+    local exit_code="$1"
+    local line_number="$2"
     log_error "Build failed at line ${line_number} with exit code ${exit_code}"
-    log_error "Command that failed: $(sed -n "${line_number}p" "$0" | xargs)"
+    log_error "Command that failed: $(sed -n "${line_number}p" "$0" | sed 's/^[[:space:]]*//')"
     log_error "Check the output above for more details"
-    exit $exit_code
+    exit "$exit_code"
 }
 
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
 # =============================================================================
-# Setup Functions
+# Environment setup
 # =============================================================================
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+
+cpu_count() {
+    if [ -n "${JOBS:-}" ] && [ "${JOBS}" -gt 0 ] 2>/dev/null; then
+        echo "${JOBS}"
+        return
+    fi
+    getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 4
 }
 
 prepare_environment() {
     log_step "Preparing build environment"
 
-    # Check and install required commands
-    log_info "Checking required commands..."
-
-    # Check Go
-    if ! command_exists go; then
-        log_error "Go is not installed. Please install Go from https://golang.org/dl/"
-        return 1
-    fi
-
-    local go_version=$(go version 2>/dev/null | grep -o 'go[0-9]\+\.[0-9]\+' | head -1)
-    log_success "Go version: $go_version"
-
-    # Check Python
-    if ! command_exists python3; then
-        log_error "Python is not installed. Please install Python from https://www.python.org/downloads/"
-        return 1
-    fi
-
-    local python_version=$(python3 --version 2>/dev/null)
-    log_success "Python version: $python_version"
-
-    # Check Node.js
-    if ! command_exists node; then
-        log_error "Node.js is not installed. Please install Node.js from https://nodejs.org/"
-        return 1
-    fi
-
-    local node_version=$(node --version 2>/dev/null)
-    log_success "Node.js version: $node_version"
-
-    # Check pnpm
-    if ! command_exists pnpm; then
-        log_error "pnpm is not installed. Please install pnpm: npm install -g pnpm"
-        return 1
-    fi
-
-    local pnpm_version=$(pnpm --version 2>/dev/null)
-    log_success "pnpm version: $pnpm_version"
-
-    # Check git
-    if ! command_exists git; then
-        log_error "git is not installed."
-        return 1
-    fi
-
-    # Check curl
-    if ! command_exists curl; then
-        log_error "curl is not installed."
-        return 1
-    fi
-
-    # Check unzip
-    if ! command_exists unzip; then
-        log_error "unzip is not installed."
-        return 1
-    fi
-
-    # Check tar
-    if ! command_exists tar; then
-        log_error "tar is not installed."
-        return 1
-    fi
-
-    # Check zip
-    if ! command_exists zip; then
-        log_error "zip is not installed."
-        return 1
-    fi
-
-    # Check md5sum (or md5 on macOS)
-    if ! command_exists md5sum && ! command_exists md5; then
-        log_error "md5sum or md5 is not installed."
-        return 1
-    fi
-
-    log_success "All required commands installed"
-
-    # Create output directory and subdirectories
-    log_info "Creating output directory structure: ${OUTPUT_DIR}"
-
-    # Check if OUTPUT_DIR exists (including symlinks)
-    if [ -e "${OUTPUT_DIR}" ]; then
-        if [ -d "${OUTPUT_DIR}" ]; then
-            log_success "Output directory already exists: ${OUTPUT_DIR}"
-        else
-            log_error "Output path exists but is not a directory: ${OUTPUT_DIR}"
-            log_error "Path type: $(ls -la "${OUTPUT_DIR}" 2>/dev/null || echo 'Cannot determine type')"
-            return 1
-        fi
-    else
-        # Try to create the directory
-        if ! mkdir -p "${OUTPUT_DIR}"; then
-            log_error "Failed to create output directory: ${OUTPUT_DIR}"
-            log_error "Current working directory: $(pwd)"
-            log_error "Directory permissions: $(ls -la . 2>/dev/null || echo 'Cannot list directory')"
-            return 1
-        fi
-        log_success "Created output directory: ${OUTPUT_DIR}"
-    fi
-
-    # Create subdirectories for organized output
-    local subdirs=("bin" "docker" "archives")
-    for subdir in "${subdirs[@]}"; do
-        if ! mkdir -p "${OUTPUT_DIR}/${subdir}"; then
-            log_error "Failed to create subdirectory: ${OUTPUT_DIR}/${subdir}"
+    # Required tools (only what this script actually uses)
+    local tool
+    for tool in go node pnpm python3 zip git; do
+        if ! command_exists "${tool}"; then
+            log_error "${tool} is not installed or not in PATH"
             return 1
         fi
     done
-    log_success "Created output subdirectories: bin, docker, archives"
+    local go_version
+    go_version="$(go version 2>/dev/null)" || go_version="go (unknown version)"
+    log_success "Required tools present: ${go_version}, node $(node --version), pnpm $(pnpm --version), $(python3 --version 2>/dev/null)"
 
-    log_info "Tidying Go modules..."
-    if ! go mod tidy >/dev/null 2>&1; then
-        log_error "Failed to tidy Go modules"
+    # Output directory structure
+    local subdir
+    for subdir in bin docker archives logs; do
+        if ! mkdir -p "${OUTPUT_DIR}/${subdir}"; then
+            log_error "Failed to create directory: ${OUTPUT_DIR}/${subdir}"
+            return 1
+        fi
+    done
+    log_success "Output directories ready under ${OUTPUT_DIR}/"
+
+    # Download modules without mutating go.mod/go.sum (unlike `go mod tidy`)
+    log_info "Downloading Go modules..."
+    if ! go mod download >/dev/null 2>&1; then
+        log_error "Failed to download Go modules"
         return 1
     fi
 
@@ -194,221 +126,207 @@ prepare_environment() {
 }
 
 # =============================================================================
-# Build Functions
+# Frontend & price preset
 # =============================================================================
 
 build_frontend() {
     log_step "Building frontend"
 
-    local web_dir="web"
-
-    # Check if web directory exists
-    if [ ! -d "$web_dir" ]; then
-        log_error "Web directory not found: $web_dir"
-        log_error "Please run this script from the project root directory"
+    if [ "${SKIP_FRONTEND:-0}" = "1" ]; then
+        if [ -f "${STATIC_OUT_DIR}/index.html" ]; then
+            log_warning "SKIP_FRONTEND=1 — reusing existing ${STATIC_OUT_DIR}"
+            return 0
+        fi
+        log_error "SKIP_FRONTEND=1 but ${STATIC_OUT_DIR}/index.html does not exist"
+        log_error "Run a full build first, or create a placeholder: mkdir -p ${STATIC_OUT_DIR} && printf '<html></html>' > ${STATIC_OUT_DIR}/index.html"
         return 1
     fi
 
-    # Change to web directory
-    cd "$web_dir" || return 1
+    if [ ! -d "${WEB_DIR}" ]; then
+        log_error "Web directory not found: ${WEB_DIR} (run this script from the project root)"
+        return 1
+    fi
 
-    # Install dependencies
     log_info "Installing frontend dependencies..."
-    if ! pnpm install; then
+    if ! (cd "${WEB_DIR}" && pnpm install --frozen-lockfile); then
         log_error "Failed to install frontend dependencies"
-        cd ..
         return 1
     fi
-    log_success "Frontend dependencies installed"
 
-    # Build the project
     log_info "Building frontend project..."
-    if ! NEXT_PUBLIC_APP_VERSION="$GIT_VERSION" pnpm run build; then
+    if ! (cd "${WEB_DIR}" && NEXT_PUBLIC_APP_VERSION="${GIT_VERSION}" pnpm run build); then
         log_error "Failed to build frontend project"
-        cd ..
-        return 1
-    fi
-    log_success "Frontend build completed"
-
-    # Return to original directory
-    cd ..
-
-    # Move out directory to static directory
-    log_info "Moving frontend output to static directory..."
-    
-    # Remove old static/out if exists
-    if [ -d "static/out" ]; then
-        rm -rf "static/out"
-        log_info "Removed old static/out directory"
-    fi
-    
-    # Move web/out to static/out
-    if [ -d "${web_dir}/out" ]; then
-        mv "${web_dir}/out" "static/"
-        log_success "Moved frontend output to static/out"
-    else
-        log_error "Frontend output directory not found: ${web_dir}/out"
         return 1
     fi
 
-    return 0
+    if [ ! -f "${WEB_DIR}/out/index.html" ]; then
+        log_error "Frontend output not found: ${WEB_DIR}/out/index.html"
+        return 1
+    fi
+
+    # Swap embedded assets (go:embed all:out reads static/out)
+    # Preserve the tracked .keep placeholder so fresh clones can `go build` 
+    # before ever running a frontend build.
+    local keep_file="${STATIC_OUT_DIR}/.keep"
+    local keep_backup=""
+    if [ -f "${keep_file}" ]; then
+        keep_backup="${OUTPUT_DIR}/.keep.bak"
+        mv "${keep_file}" "${keep_backup}"
+    fi
+    if [ -d "${STATIC_OUT_DIR}" ]; then
+        rm -rf "${STATIC_OUT_DIR}"
+    fi
+    mv "${WEB_DIR}/out" "${STATIC_OUT_DIR}"
+    if [ -n "${keep_backup}" ]; then
+        mv "${keep_backup}" "${keep_file}"
+    fi
+    log_success "Frontend output moved to ${STATIC_OUT_DIR}"
 }
 
 update_price() {
-    log_step "Updating price"
+    if [ "${SKIP_PRICE:-0}" = "1" ]; then
+        log_warning "SKIP_PRICE=1 — skipping model price preset update"
+        return 0
+    fi
+
+    log_step "Updating model price presets"
     if ! python3 scripts/updatePrice.py; then
-        log_error "Failed to update price"
+        log_error "Failed to update price presets (needs network access to models.dev)"
         return 1
     fi
-    log_success "Price updated"
+    log_success "Price presets updated"
 }
 
+# =============================================================================
+# Go builds
+# =============================================================================
 
 get_go_arch() {
     case "$1" in
-    "x86_64") echo "amd64" ;;
-    "arm64") echo "arm64" ;;
-    "x86") echo "386" ;;
-    "armv7") echo "arm" ;;
-    *)
-        log_error "Unsupported architecture: $1"
-        return 1
-        ;;
+    x86_64) echo "amd64" ;;
+    arm64)  echo "arm64" ;;
+    x86)    echo "386" ;;
+    armv7)  echo "arm" ;;
+    *)      log_error "Unsupported architecture: $1"; return 1 ;;
     esac
+}
+
+# Extra Go env for special architectures (bash 3.2-safe: echoed KEY=VAL pairs)
+get_go_arch_env() {
+    case "$1" in
+    armv7) echo "GOARM=7" ;;
+    *)     return 0 ;;
+    esac
+}
+
+binary_name() {
+    # $1=os $2=arch -> octopus-<os>-<arch>[.exe]
+    local name="${APP_NAME}-${1}-${2}"
+    [ "$1" = "windows" ] && name="${name}.exe"
+    echo "${name}"
 }
 
 build_standard() {
     local os="$1"
     local arch="$2"
-    local go_arch
+    local go_arch extra_env output_file
 
     if ! go_arch="$(get_go_arch "${arch}")"; then
-        log_error "Failed to get Go architecture: ${arch}"
         return 1
     fi
+    extra_env="$(get_go_arch_env "${arch}")"
 
-    local output_file="${OUTPUT_DIR}/bin/${APP_NAME}-${os}-${arch}"
+    output_file="${OUTPUT_DIR}/bin/$(binary_name "${os}" "${arch}")"
 
     log_info "Building ${os}/${arch}..."
 
-    if ! GOOS="${os}" GOARCH="${go_arch}" CGO_ENABLED=0 \
-        go build -o "${output_file}" -ldflags="${LDFLAGS}" -tags=jsoniter "${MAIN_DIR}" 2>&1; then
+    # shellcheck disable=SC2086
+    if ! env \
+        GOOS="${os}" \
+        GOARCH="${go_arch}" \
+        CGO_ENABLED=0 \
+        ${extra_env} \
+        go build -trimpath -tags=jsoniter -ldflags="${LDFLAGS}" -o "${output_file}" "${MAIN_DIR}"; then
         log_error "Failed to build ${os}/${arch}"
-        log_error "Build command: GOOS=${os} GOARCH=${go_arch} CGO_ENABLED=0 go build -o ${output_file} -ldflags=\"${LDFLAGS}\" -tags=jsoniter ${MAIN_DIR}"
         return 1
     fi
 
     if [ ! -f "${output_file}" ]; then
-        log_error "Build completed but output file not found: ${output_file}"
+        log_error "Build reported success but output missing: ${output_file}"
         return 1
     fi
 
     log_success "Built ${os}/${arch} → bin/$(basename "${output_file}")"
 }
 
-# =============================================================================
-# Post-build Functions
-# =============================================================================
+# Parallel batch builds for release. Args: "os arch" pairs (os1 arch1 os2 arch2 ...).
+# Each build's console output is captured to build/logs/<os>-<arch>.log.
+# Returns non-zero if any build failed (after building all of them).
+build_all_targets() {
+    local jobs
+    jobs="$(cpu_count)"
+    local total="$#"
+    log_info "Building ${total} targets with up to ${jobs} parallel go builds"
 
-create_archives() {
-    log_step "Creating distribution archives"
+    : >"${OUTPUT_DIR}/logs/.build-status"
 
-    local archives_dir="${OUTPUT_DIR}/archives"
+    local idx=1
+    while [ "$idx" -le "$total" ]; do
+        local batch_pids=""
+        local count=0
 
-    # Copy documentation files to archives directory
-    cp README.md LICENSE "${archives_dir}/" 2>/dev/null || log_info "Documentation files not found, skipping"
+        # Launch one batch of up to $jobs builds
+        while [ "$count" -lt "$jobs" ] && [ "$idx" -le "$total" ]; do
+            local os arch
+            eval "os=\${$idx}"
+            idx=$((idx + 1))
+            eval "arch=\${$idx}"
+            idx=$((idx + 1))
 
-    # Archive all binaries (zip format for all platforms)
-    while IFS= read -r -d '' file; do
-        local basename_file
-        basename_file=$(basename "$file")
-        local extension=""
+            local label="${os}-${arch}"
+            log_info "→ launching ${label}"
+            (
+                if build_standard "${os}" "${arch}" >"${OUTPUT_DIR}/logs/${label}.log" 2>&1; then
+                    echo "OK ${label}" >>"${OUTPUT_DIR}/logs/.build-status"
+                else
+                    echo "FAIL ${label}" >>"${OUTPUT_DIR}/logs/.build-status"
+                fi
+            ) &
+            batch_pids="${batch_pids} $!"
+            count=$((count + 1))
+        done
 
-        # Add .exe extension for Windows binaries
-        if [[ "$basename_file" == *"-windows-"* ]]; then
-            extension=".exe"
-        fi
+        # Drain the batch
+        local pid
+        for pid in ${batch_pids}; do
+            wait "${pid}" || log_error "A build failed — see ${OUTPUT_DIR}/logs/"
+        done
+    done
 
-        if ! cp "$file" "${archives_dir}/${APP_NAME}${extension}" 2>/dev/null; then
-            log_error "Failed to copy $file to ${archives_dir}/${APP_NAME}${extension}"
-            continue
-        fi
+    # Aggregate status
+    local failed=0 entry
+    while IFS= read -r entry; do
+        case "${entry}" in
+        FAIL*)
+            log_error "Build failed: ${entry#FAIL } (log: ${OUTPUT_DIR}/logs/${entry#FAIL }.log)"
+            failed=1
+            ;;
+        esac
+    done <"${OUTPUT_DIR}/logs/.build-status"
+    rm -f "${OUTPUT_DIR}/logs/.build-status"
 
-        if (cd "${archives_dir}" && zip -q "${basename_file}.zip" "${APP_NAME}${extension}" README.md LICENSE 2>/dev/null); then
-            rm -f "${archives_dir}/${APP_NAME}${extension}"
-            log_success "Archived: archives/${basename_file}.zip"
-        else
-            log_error "Failed to create archive: ${basename_file}.zip"
-            rm -f "${archives_dir}/${APP_NAME}${extension}"
-        fi
-    done < <(find "${OUTPUT_DIR}/bin/" -name "${APP_NAME}-*" -type f -print0 2>/dev/null)
-
-    # Cleanup documentation files from archives directory
-    rm -f "${archives_dir}/README.md" "${archives_dir}/LICENSE"
-
-    if ! cd .. 2>/dev/null; then
-        log_error "Failed to return to parent directory"
-        return 1
-    fi
-
-    log_success "Created archives in ${archives_dir}/"
+    return "$failed"
 }
 
-generate_checksums() {
-    log_step "Generating checksums"
-
-    local bin_dir="${OUTPUT_DIR}/bin"
-
-    if ! cd "${bin_dir}" 2>/dev/null; then
-        log_error "Failed to change to bin directory: ${bin_dir}"
-        return 1
-    fi
-
-    if ! find . -maxdepth 1 -name "${APP_NAME}-*" -type f | head -1 | grep -q .; then
-        log_info "No build artifacts found in bin directory, skipping checksums"
-        cd ../.. 2>/dev/null || true
-        return 0
-    fi
-
-    # Use appropriate checksum command based on OS
-    local checksum_cmd
-    if command_exists md5sum; then
-        checksum_cmd="md5sum"
-    elif command_exists md5; then
-        checksum_cmd="md5 -r" # -r for BSD md5 to match md5sum format
-    else
-        log_error "No checksum command available (md5sum or md5)"
-        cd ../.. 2>/dev/null || true
-        return 1
-    fi
-
-    if find . -maxdepth 1 -name "${APP_NAME}-*" -type f -print0 | xargs -0 $checksum_cmd >md5.txt 2>/dev/null; then
-        local checksum_count=$(wc -l <md5.txt 2>/dev/null || echo "0")
-        log_success "Generated checksums for ${checksum_count} files in bin/"
-    else
-        log_error "Failed to generate checksums"
-        cd ../.. 2>/dev/null || true
-        return 1
-    fi
-
-    if ! cd ../.. 2>/dev/null; then
-        log_error "Failed to return to parent directory"
-        return 1
-    fi
-}
+# =============================================================================
+# Release post-processing
+# =============================================================================
 
 prepare_docker_binaries() {
     log_step "Preparing Docker binaries"
 
     local docker_dir="${OUTPUT_DIR}/docker"
-
-    # Create docker directory under OUTPUT_DIR
-    if ! mkdir -p "${docker_dir}"; then
-        log_error "Failed to create docker directory: ${docker_dir}"
-        log_error "Current working directory: $(pwd)"
-        log_error "Directory permissions: $(ls -la . 2>/dev/null || echo 'Cannot list directory')"
-        return 1
-    fi
+    mkdir -p "${docker_dir}" || { log_error "Failed to create ${docker_dir}"; return 1; }
 
     local platforms=(
         "x86_64:linux/amd64"
@@ -417,221 +335,224 @@ prepare_docker_binaries() {
         "arm64:linux/arm64"
     )
 
-    local copied_count=0
-
+    local copied=0 platform arch docker_platform binary_name platform_dir
     for platform in "${platforms[@]}"; do
-        local arch="${platform%%:*}"
-        local docker_platform="${platform#*:}"
-        local binary_name="${APP_NAME}-linux-${arch}"
-        local platform_dir="${docker_dir}/${docker_platform}"
+        arch="${platform%%:*}"
+        docker_platform="${platform#*:}"
+        binary_name="${APP_NAME}-linux-${arch}"
+        platform_dir="${docker_dir}/${docker_platform}"
 
         if ! mkdir -p "${platform_dir}"; then
-            log_error "Failed to create directory: ${platform_dir}"
-            log_error "Docker platform: ${docker_platform}"
+            log_warning "Failed to create ${platform_dir}, skipping ${docker_platform}"
             continue
         fi
 
-        # Try to copy from binary file first
         if [ -f "${OUTPUT_DIR}/bin/${binary_name}" ]; then
-            if cp "${OUTPUT_DIR}/bin/${binary_name}" "${platform_dir}/${APP_NAME}" 2>/dev/null; then
-                log_success "Copied bin/${binary_name} → docker/${docker_platform}/${APP_NAME}"
-                ((copied_count++))
+            if cp "${OUTPUT_DIR}/bin/${binary_name}" "${platform_dir}/${APP_NAME}"; then
+                log_info "bin/${binary_name} → docker/${docker_platform}/${APP_NAME}"
+                copied=$((copied + 1))
             else
-                log_error "Failed to copy bin/${binary_name} to ${platform_dir}/${APP_NAME}"
+                log_warning "Failed to copy ${binary_name} for ${docker_platform}"
             fi
         else
-            log_warning "Binary not found: bin/${binary_name}"
+            log_warning "Binary not found (skipping ${docker_platform}): bin/${binary_name}"
         fi
     done
 
-    if [ $copied_count -gt 0 ]; then
-        log_success "Prepared ${copied_count} Docker binaries in ${docker_dir}/"
+    if [ "$copied" -gt 0 ]; then
+        log_success "Prepared ${copied} Docker binary directories in ${docker_dir}/"
     else
         log_warning "No Docker binaries prepared"
     fi
+    return 0
+}
+
+generate_checksums() {
+    log_step "Generating checksums"
+
+    local bin_dir="${OUTPUT_DIR}/bin"
+    if ! ls "${bin_dir}/${APP_NAME}-"* >/dev/null 2>&1; then
+        log_info "No binaries in ${bin_dir}, skipping checksums"
+        return 0
+    fi
+
+    local checksum_cmd
+    if command_exists sha256sum; then
+        checksum_cmd="sha256sum"
+    elif command_exists shasum; then
+        checksum_cmd="shasum -a 256" # BSD/macOS
+    else
+        log_error "Neither sha256sum nor shasum available"
+        return 1
+    fi
+
+    # shellcheck disable=SC2046
+    if (cd "${bin_dir}" && ${checksum_cmd} ${APP_NAME}-* > sha256.txt); then
+        log_success "Generated $(ls "${bin_dir}/${APP_NAME}-"* | wc -l | tr -d ' ') checksums → bin/sha256.txt"
+    else
+        log_error "Failed to generate checksums"
+        return 1
+    fi
+}
+
+create_archives() {
+    log_step "Creating distribution archives"
+
+    local archives_dir="${OUTPUT_DIR}/archives"
+    mkdir -p "${archives_dir}"
+
+    # Stage docs alongside binaries so they land in every archive
+    local doc
+    for doc in README.md LICENSE; do
+        [ -f "${doc}" ] && cp "${doc}" "${archives_dir}/"
+    done
+
+    local file base ext zip_name
+    for file in "${OUTPUT_DIR}/bin/${APP_NAME}-"*; do
+        [ -f "${file}" ] || continue
+        base="$(basename "${file}")"
+        case "${base}" in
+        *.exe) ext=".exe" ;;
+        *)     ext="" ;;
+        esac
+        zip_name="${base}.zip"
+
+        # Stage under the final name, zip, then drop the staging copy
+        cp "${file}" "${archives_dir}/${APP_NAME}${ext}"
+        if (cd "${archives_dir}" && zip -q "${zip_name}" "${APP_NAME}${ext}" README.md LICENSE); then
+            log_success "Archived: archives/${zip_name}"
+        else
+            log_warning "Failed to create archive: ${zip_name}"
+        fi
+        rm -f "${archives_dir}/${APP_NAME}${ext}"
+    done
+
+    # Remove staged docs
+    rm -f "${archives_dir}/README.md" "${archives_dir}/LICENSE"
+
+    log_success "Archives ready in ${archives_dir}/"
+}
+
+print_release_summary() {
+    log_step "Release summary"
+    echo "📦 ${APP_NAME} ${GIT_VERSION} (${COMMIT_ID})"
+    echo "  • Binaries:   ${OUTPUT_DIR}/bin/"
+    echo "  • Checksums:  ${OUTPUT_DIR}/bin/sha256.txt"
+    echo "  • Docker:     ${OUTPUT_DIR}/docker/"
+    echo "  • Archives:   ${OUTPUT_DIR}/archives/"
 }
 
 # =============================================================================
-# Main Execution
+# CLI
 # =============================================================================
 
 show_usage() {
-    echo "Usage: $0 <command> [os] [arch]"
-    echo ""
-    echo "Commands:"
-    echo "  release              Build all platforms and create distribution packages"
-    echo "  build <os> <arch>    Build for specific OS and architecture"
-    echo "  help                 Show this help message"
-    echo ""
-    echo "Supported OS:"
-    echo "  linux, windows, darwin, android"
-    echo ""
-    echo "Supported architectures:"
-    echo "  x86_64, arm64, armv7, x86"
-    echo ""
-    echo "Examples:"
-    echo "  $0 build windows x86_64"
-    echo "  $0 build linux x86_64"
-    echo "  $0 build android arm64"
-    echo "  $0 release"
+    cat <<EOF
+Usage: $0 <command> [os] [arch]
+
+Commands:
+  release              Build all release targets, Docker binaries, archives, checksums
+  build <os> <arch>    Build a single target
+  version              Print build metadata
+  help                 Show this help
+
+Supported OS:   linux, windows, darwin, android
+Supported arch: x86_64, arm64, armv7, x86
+
+Environment:
+  JOBS=N            Parallel go builds during release (default: all cores)
+  SKIP_FRONTEND=1   Reuse existing static/out (requires a previous full build)
+  SKIP_PRICE=1      Skip price preset regeneration
+
+Examples:
+  $0 build windows x86_64
+  $0 build darwin arm64
+  SKIP_FRONTEND=1 $0 build linux x86_64
+  JOBS=4 SKIP_PRICE=1 $0 release
+EOF
 }
 
 validate_os_arch() {
-    local os="$1"
-    local arch="$2"
-
-    # Validate OS
-    case "$os" in
-    "linux" | "windows" | "darwin" | "android") ;;
+    local os="$1" arch="$2"
+    case "${os}" in
+    linux | windows | darwin | android) ;;
     *)
-        log_error "Unsupported OS: $os"
-        log_error "Supported OS: linux, windows, darwin, android"
+        log_error "Unsupported OS: ${os} (supported: linux, windows, darwin, android)"
         return 1
         ;;
     esac
-
-    # Validate architecture
-    case "$arch" in
-    "x86_64" | "arm64" | "armv7" | "x86") ;;
+    case "${arch}" in
+    x86_64 | arm64 | armv7 | x86) ;;
     *)
-        log_error "Unsupported architecture: $arch"
-        log_error "Supported architectures: x86_64, arm64, armv7, x86"
+        log_error "Unsupported architecture: ${arch} (supported: x86_64, arm64, armv7, x86)"
         return 1
         ;;
     esac
-
-    return 0
 }
 
 main() {
     case "${1:-}" in
-    "build")
+    build)
         if [ $# -ne 3 ]; then
-            log_error "Build command requires OS and architecture"
             log_error "Usage: $0 build <os> <arch>"
             show_usage
             exit 1
         fi
+        validate_os_arch "$2" "$3" || exit 1
 
-        local os="$2"
-        local arch="$3"
+        log_step "Single platform build"
+        echo "📦 ${APP_NAME} ${GIT_VERSION} (${COMMIT_ID}) for ${2}/${3}"
 
-        if ! validate_os_arch "$os" "$arch"; then
-            exit 1
-        fi
-
-        log_step "Starting single platform build"
-        echo "📦 Building ${APP_NAME} ${GIT_VERSION} (${COMMIT_ID}) for ${os}/${arch}"
-        echo ""
-
-        # Setup
-        if ! prepare_environment; then
-            log_error "Failed to prepare build environment"
-            exit 1
-        fi
-
-        # Build frontend
-        if ! build_frontend; then
-            log_error "Failed to build frontend"
-            exit 1
-        fi
-
-        # Update price
-        if ! update_price; then
-            log_error "Failed to update price"
-            exit 1
-        fi
-
-        # Build for specified platform
-        log_step "Building binary"
-
-        if ! build_standard "$os" "$arch"; then
-            log_error "Failed to build ${os}/${arch}"
-            exit 1
-        fi
+        prepare_environment
+        build_frontend
+        update_price
+        build_standard "$2" "$3"
 
         log_step "Build completed"
-        log_success "Binary ready: ${OUTPUT_DIR}/bin/${APP_NAME}-${os}-${arch}"
+        log_success "Binary ready: ${OUTPUT_DIR}/bin/$(binary_name "$2" "$3")"
         ;;
-    "release")
-        log_step "Starting release build"
-        echo "📦 Building ${APP_NAME} ${GIT_VERSION} (${COMMIT_ID})"
-        echo ""
 
-        # Setup
-        if ! prepare_environment; then
-            log_error "Failed to prepare build environment"
-            exit 1
-        fi
+    release)
+        log_step "Release build"
+        echo "📦 ${APP_NAME} ${GIT_VERSION} (${COMMIT_ID})"
 
-        # Build frontend
-        if ! build_frontend; then
-            log_error "Failed to build frontend"
-            exit 1
-        fi
+        prepare_environment
+        build_frontend
+        update_price
 
-        # Update price
-        if ! update_price; then
-            log_error "Failed to update price"
-            exit 1
-        fi
-
-        # Build for different platforms
         log_step "Building binaries"
+        local build_failed=0
+        # shellcheck disable=SC2086
+        build_all_targets ${RELEASE_TARGETS[*]} || build_failed=1
 
-        # Standard builds (pure Go, static binaries)
-        if ! build_standard linux x86_64; then
-            log_error "Failed to build Linux x86_64"
-        fi
-        if ! build_standard linux arm64; then
-            log_error "Failed to build Linux arm64"
-        fi
-        if ! build_standard linux armv7; then
-            log_error "Failed to build Linux armv7"
-        fi
-        if ! build_standard linux x86; then
-            log_error "Failed to build Linux x86"
-        fi
-        if ! build_standard windows x86_64; then
-            log_error "Failed to build Windows x86_64"
-        fi
-        if ! build_standard windows x86; then
-            log_error "Failed to build Windows x86"
-        fi
-        if ! build_standard darwin arm64; then
-            log_error "Failed to build Darwin arm64"
-        fi
-        if ! build_standard darwin x86_64; then
-            log_error "Failed to build Darwin arm64"
-        fi
+        prepare_docker_binaries || log_warning "Docker binary prep failed, continuing"
+        generate_checksums || log_warning "Checksum generation failed, continuing"
+        create_archives || log_warning "Archive creation failed, continuing"
 
-        # Post-processing
-        if ! prepare_docker_binaries; then
-            log_warning "Failed to prepare Docker binaries, but continuing..."
+        print_release_summary
+        if [ "$build_failed" -ne 0 ]; then
+            log_error "One or more targets failed to build — see ${OUTPUT_DIR}/logs/"
+            exit 1
         fi
-
-        if ! generate_checksums; then
-            log_warning "Failed to generate checksums, but continuing..."
-        fi
-
-        if ! create_archives; then
-            log_warning "Failed to create archives, but continuing..."
-        fi
-
-        log_step "Build completed"
-        log_success "All artifacts ready in ${OUTPUT_DIR}/"
-        log_info "  • Binaries: ${OUTPUT_DIR}/bin/"
-        log_info "  • Docker binaries: ${OUTPUT_DIR}/docker/"
-        log_info "  • Archives: ${OUTPUT_DIR}/archives/"
         ;;
-    "help" | "-h" | "--help")
+
+    version)
+        echo "version:  ${GIT_VERSION}"
+        echo "commit:   ${COMMIT_ID}"
+        echo "built:    ${BUILD_TIME}"
+        echo "author:   ${GIT_AUTHOR}"
+        ;;
+
+    help | -h | --help)
         show_usage
         ;;
+
     "")
         log_error "No command specified"
         show_usage
         exit 1
         ;;
+
     *)
         log_error "Unknown command: $1"
         show_usage

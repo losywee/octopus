@@ -173,7 +173,7 @@ func (p *StreamProcessor) Run() error {
 				// A read error may just be the read loop unblocking after the
 				// client disconnected (readCtx derives from Context). Handle it
 				// exactly like the Context.Done() branch instead of masking a
-				// completed stream as a read failure (#111/#116 semantics).
+				// completed stream as a read failure.
 				if p.config.Context.Err() != nil {
 					return p.handleDisconnect()
 				}

@@ -150,44 +150,50 @@ def generate_entry(model_id: str, cost: dict) -> str:
 def main():
     print(f"Fetching price data from {LLM_PRICE_URL}...")
     raw_price = fetch_price_data()
-    
+
     entries = []
+    seen_ids = set()  # Global dedup: the same model id can appear under multiple providers
     model_count = 0
-    
+
     for provider in PROVIDERS:
         if provider not in raw_price:
             print(f"  Provider '{provider}' not found, skipping...")
             continue
-            
+
         models = raw_price[provider].get("models", {})
         provider_count = 0
-        
+
         for model_data in models.values():
             model_id = model_data.get("id", "").lower()
             cost = model_data.get("cost", {})
-            
+
             if not model_id:
                 continue
-            
-            # 添加原始模型
-            entries.append(generate_entry(model_id, cost))
-            provider_count += 1
-            
+
+            # 添加原始模型 (first provider in PROVIDERS order wins)
+            if model_id not in seen_ids:
+                entries.append(generate_entry(model_id, cost))
+                seen_ids.add(model_id)
+                provider_count += 1
+
             # 收集所有别名
             aliases = []
-            
+
             # 1. Claude 模型自动生成别名
             aliases.extend(generate_claude_aliases(model_id))
-            
+
             # 2. 静态别名映射
             if model_id in MODEL_ALIASES:
                 aliases.extend(MODEL_ALIASES[model_id])
-            
-            # 添加别名 (去重)
-            for alias in set(aliases):
-                entries.append(generate_entry(alias.lower(), cost))
-                provider_count += 1
-            
+
+            # 添加别名 (sorted for deterministic output, globally deduped)
+            for alias in sorted(set(aliases)):
+                alias = alias.lower()
+                if alias and alias not in seen_ids:
+                    entries.append(generate_entry(alias, cost))
+                    seen_ids.add(alias)
+                    provider_count += 1
+
         print(f"  {provider}: {provider_count} models")
         model_count += provider_count
     
