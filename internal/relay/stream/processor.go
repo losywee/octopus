@@ -155,6 +155,13 @@ func (p *StreamProcessor) Run() error {
 
 		case r, ok := <-results:
 			if !ok {
+				// Read loop exited without sending a final result: it was
+				// unblocked by readCtx cancellation. Mirror the Context.Done()
+				// path so terminal-event detection and partial metrics still
+				// apply; never treat a canceled mid-stream as a clean end.
+				if p.config.Context.Err() != nil {
+					return p.handleDisconnect()
+				}
 				// Channel closed, stream ended
 				return p.finalize()
 			}
@@ -162,6 +169,13 @@ func (p *StreamProcessor) Run() error {
 			if r.err != nil {
 				if r.err == io.EOF {
 					return p.finalize()
+				}
+				// A read error may just be the read loop unblocking after the
+				// client disconnected (readCtx derives from Context). Handle it
+				// exactly like the Context.Done() branch instead of masking a
+				// completed stream as a read failure (#111/#116 semantics).
+				if p.config.Context.Err() != nil {
+					return p.handleDisconnect()
 				}
 				return fmt.Errorf("stream read error: %w", r.err)
 			}
