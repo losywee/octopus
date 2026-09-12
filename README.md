@@ -34,10 +34,17 @@
 
 ### 🐳 Docker
 
+Images are published to both **Docker Hub** and **GHCR** (Debian by default; Alpine uses the `-alpine` suffix):
+
+| Registry | Example |
+|----------|---------|
+| Docker Hub (recommended) | `qianduzzz/octopus:latest` |
+| GHCR | `ghcr.io/xuanli27/octopus:latest` |
+
 Run directly:
 
 ```bash
-docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 ghcr.io/xuanli27/octopus
+docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 qianduzzz/octopus:latest
 ```
 
 Or use docker compose:
@@ -46,6 +53,9 @@ Or use docker compose:
 wget https://raw.githubusercontent.com/xuanli27/octopus/refs/heads/dev/docker-compose.yml
 docker compose up -d
 ```
+
+> Alpine: `qianduzzz/octopus:latest-alpine` or `ghcr.io/xuanli27/octopus:latest-alpine`  
+> Pin a version by replacing `latest` with a tag such as `v0.9.2` / `v0.9.2-alpine`
 
 
 ### 📦 Download from Release
@@ -59,9 +69,9 @@ Download the binary for your platform from [Releases](https://github.com/xuanli2
 ### 🛠️ Build from Source
 
 **Requirements:**
-- Go 1.24.4
-- Node.js 18+
-- pnpm
+- Go 1.25.0
+- Node.js 22
+- pnpm 11.1.2
 
 ```bash
 # Clone the repository
@@ -255,14 +265,15 @@ The program automatically appends API paths based on channel type. You only need
 
 ---
 
-### 📁 Group Management
+### 📁 Group Management (Public Groups)
 
-Groups aggregate multiple channels into a unified external model name.
+**Public groups** aggregate multiple channels into a unified external model name.
 
 **Core Concepts:**
 
-- **Group name** is the model name exposed by the program
-- When calling the API, set the `model` parameter to the group name
+- **Public group name** is the model name exposed by the program
+- When calling the API, set the `model` parameter to the public group name
+- Do not confuse this with an **upstream group** on a relay site; see [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)
 
 **Load Balancing Modes:**
 
@@ -412,4 +423,3 @@ Based on [Hureru/octopus](https://github.com/Hureru/octopus) / [bestruirui/octop
 ## 🔗 Friend Links
 
 - 🐧 [LinuxDO](https://linux.do) - A community for tech enthusiasts
-

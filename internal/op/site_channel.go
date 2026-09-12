@@ -454,6 +454,8 @@ func UpdateSiteProjectedChannelSettings(siteID int, accountID int, req []model.S
 		if err := channelRefreshCacheByID(item.ChannelID, ctx); err != nil {
 			return err
 		}
+		// Projection edits change live routing config — drop circuit/sticky + 1h health window.
+		resetBalancerStateForChannel(item.ChannelID)
 		channel, err := ChannelGet(item.ChannelID, ctx)
 		if err != nil {
 			return err

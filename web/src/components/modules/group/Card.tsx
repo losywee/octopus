@@ -17,6 +17,8 @@ import { GroupHealthBadge } from './health';
 import { modelChannelKey, MODE_LABELS } from './utils';
 import { GroupMode, type GroupUpdateRequest } from '@/api/endpoints/group';
 import { PresetPopover } from './PresetPopover';
+import { useRuntimeOverview } from '@/api/endpoints/runtime';
+import { inferModelFamily } from '@/lib/model-family';
 import {
     MorphingDialog,
     MorphingDialogClose,
@@ -74,6 +76,7 @@ function EditDialogContent({ group, displayMembers, isSubmitting, onSubmit }: Ed
 
 export function GroupCard({ group }: { group: Group }) {
     const t = useTranslations('group');
+    const { data: runtime } = useRuntimeOverview(true);
     const updateGroup = useUpdateGroup();
     const deleteGroup = useDeleteGroup();
     const togglePin = useToggleGroupPin();
@@ -286,6 +289,22 @@ export function GroupCard({ group }: { group: Group }) {
         });
     }, [group.first_token_time_out, group.session_keep_time, group.retry_enabled, group.max_retries, group.id, group.items, group.match_regex, group.mode, group.name, onSuccess, onError, updateGroup]);
 
+    const channelIds = useMemo(
+        () => Array.from(new Set((group.items || []).map((i) => i.channel_id).filter((id) => id > 0))),
+        [group.items],
+    );
+    const openCircuits = useMemo(() => {
+        const set = new Set(channelIds);
+        return (runtime?.circuits ?? []).filter((c) => set.has(c.channel_id) && (c.state === 'open' || c.state === 'half_open')).length;
+    }, [channelIds, runtime?.circuits]);
+    const failHint = useMemo(() => {
+        const set = new Set(channelIds);
+        const rows = (runtime?.channel_health ?? []).filter((h) => set.has(h.channel_id));
+        if (rows.length === 0) return null;
+        const worst = [...rows].sort((a, b) => b.fail_rate - a.fail_rate)[0];
+        return worst;
+    }, [channelIds, runtime?.channel_health]);
+
     return (
         <article className="relative group/card flex flex-col rounded-3xl border border-border bg-card text-card-foreground p-4 custom-shadow">
             <header className="flex items-start justify-between mb-3 relative overflow-visible rounded-xl -mx-1 px-1 -my-1 py-1">
@@ -296,6 +315,21 @@ export function GroupCard({ group }: { group: Group }) {
                         </TooltipTrigger>
                         <TooltipContent key={group.name}>{group.name}</TooltipContent>
                     </Tooltip>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+                            {inferModelFamily(group.name)} · {t(`mode.${MODE_LABELS[group.mode]}`)} · {(group.items || []).length}
+                        </span>
+                        {openCircuits > 0 ? (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                熔断 {openCircuits}
+                            </span>
+                        ) : null}
+                        {failHint && failHint.fail_rate >= 20 ? (
+                            <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                                近1h {failHint.fail_rate.toFixed(0)}%
+                            </span>
+                        ) : null}
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">

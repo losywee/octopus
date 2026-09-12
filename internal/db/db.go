@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/xuanli27/octopus/internal/db/migrate"
 	"github.com/xuanli27/octopus/internal/model"
-	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -78,6 +78,8 @@ func InitDB(dbType, dsn string, debug bool) error {
 		&model.SiteModel{},
 		&model.SiteChannelBinding{},
 		&model.Group{},
+		&model.PublicModel{},
+		&model.PublicModelAlias{},
 		&model.GroupItem{},
 		&model.GroupPreset{},
 		&model.LLMInfo{},
@@ -94,6 +96,8 @@ func InitDB(dbType, dsn string, debug bool) error {
 		&model.GroupHealthAttempt{},
 		&model.WSResponseAffinity{},
 		&model.SiteChannelOutlierState{},
+		&model.SiteSyncJob{},
+		&model.SiteSyncLease{},
 		&migrate.MigrationRecord{},
 	}
 	if dbType == "sqlite" {

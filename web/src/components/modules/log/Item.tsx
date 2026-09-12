@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Clock, Zap, AlertCircle, ArrowDownToLine, ArrowUpFromLine, DollarSign, ArrowRight, ArrowDown, Send, MessageSquare, Loader2, RotateCw, ChevronDown, ChevronUp, Pin, KeyRound, CircleOff, Link, Globe } from 'lucide-react';
+import { Copy, Clock, Zap, AlertCircle, ArrowDownToLine, ArrowUpFromLine, DollarSign, ArrowRight, ArrowDown, Send, MessageSquare, Loader2, RotateCw, ChevronDown, ChevronUp, Pin, KeyRound, CircleOff, Link, Globe } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'motion/react';
 import JsonView from '@uiw/react-json-view';
@@ -108,6 +108,7 @@ function mergeAdjacentAttempts(attempts: ChannelAttempt[]): MergedAttempt[] {
             && last.model_name === a.model_name
             && last.status === a.status
             && (last.msg ?? '') === (a.msg ?? '')
+            && (last.reason ?? '') === (a.reason ?? '')
         ) {
             last.repeat += 1;
             last.lastAttemptNum = a.attempt_num;
@@ -237,14 +238,56 @@ function getWSRecoveryBadgeMeta(recovery: RelayLogWSRecovery | null | undefined,
     }
 }
 
-function getAttemptStatusMeta(status: AttemptStatus, t: ReturnType<typeof useTranslations<'log.card'>>) {
-    switch (status) {
+function classifyAttemptKind(status: AttemptStatus, msg?: string, reason?: string) {
+    const text = `${msg || ''} ${reason || ''}`.toLowerCase();
+    if (status === 'circuit_break') return 'circuit_break' as const;
+    if (status === 'success') return 'success' as const;
+    if (
+        status === 'skipped' &&
+        (text.includes('client canceled') || text.includes('client cancelled') || text.includes('context canceled'))
+    ) {
+        return 'canceled' as const;
+    }
+    if (
+        text.includes('timeout=first_token') ||
+        text.includes('first token timeout') ||
+        text.includes('timeout=request') ||
+        text.includes('request timeout')
+    ) {
+        return 'timeout' as const;
+    }
+    if (status === 'skipped') return 'skipped' as const;
+    return 'failed' as const;
+}
+
+function getAttemptStatusMeta(
+    status: AttemptStatus,
+    t: ReturnType<typeof useTranslations<'log.card'>>,
+    msg?: string,
+    reason?: string,
+) {
+    const kind = classifyAttemptKind(status, msg, reason);
+    switch (kind) {
         case 'success':
             return {
                 label: t('success'),
                 badgeClassName: 'bg-primary/15 text-primary',
                 containerClassName: 'bg-primary/5 border-primary/20 hover:bg-primary/10',
                 messageClassName: 'text-primary/90 border-primary/30',
+            };
+        case 'canceled':
+            return {
+                label: t('canceled'),
+                badgeClassName: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+                containerClassName: 'bg-sky-500/5 border-sky-500/20 hover:bg-sky-500/10',
+                messageClassName: 'text-sky-700 dark:text-sky-300 border-sky-500/30',
+            };
+        case 'timeout':
+            return {
+                label: t('timeout'),
+                badgeClassName: 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
+                containerClassName: 'bg-orange-500/5 border-orange-500/20 hover:bg-orange-500/10',
+                messageClassName: 'text-orange-700 dark:text-orange-300 border-orange-500/30',
             };
         case 'skipped':
             return {
@@ -295,7 +338,7 @@ function RetryBadgeWithTooltip({ channelName, brandColor, attempts }: RetryBadge
             </TooltipTrigger>
             <TooltipContent className="border bg-card p-2 min-w-[280px] shadow-sm rounded-3xl flex flex-col gap-1">
                 {merged.map((attempt, idx) => {
-                    const statusMeta = getAttemptStatusMeta(attempt.status, t);
+                    const statusMeta = getAttemptStatusMeta(attempt.status, t, attempt.msg, attempt.reason);
 
                     return (
                         <div key={idx} className="flex flex-col w-full">
@@ -315,6 +358,11 @@ function RetryBadgeWithTooltip({ channelName, brandColor, attempts }: RetryBadge
                                     <span className="text-[10px] text-muted-foreground">
                                         {attempt.model_name} • {formatDuration(attempt.totalDuration)}
                                     </span>
+                                    {attempt.reason ? (
+                                        <span className="truncate text-[10px] font-mono text-muted-foreground/80">
+                                            {attempt.reason}
+                                        </span>
+                                    ) : null}
                                 </div>
                                 {attempt.repeat > 1 ? (
                                     <Badge variant="outline" className="shrink-0 h-5 px-1.5 text-[10px] font-semibold tabular-nums">
@@ -521,6 +569,34 @@ function AttemptDisableButton({
     );
 }
 
+
+function buildLogDiagnosticReport(log: RelayLog): string {
+    const lines: string[] = [];
+    lines.push(`# Octopus log #${log.id}`);
+    lines.push(`time: ${new Date((log.time || 0) * 1000).toISOString()}`);
+    lines.push(`model: ${log.request_model_name} -> ${log.actual_model_name || '-'}`);
+    lines.push(`channel: ${log.channel_name || log.channel} (#${log.channel})`);
+    if (log.request_api_key_name) lines.push(`api_key: ${log.request_api_key_name}`);
+    if (log.client_ip) lines.push(`client_ip: ${log.client_ip}`);
+    lines.push(`tokens: in=${log.input_tokens} out=${log.output_tokens} cost=${log.cost}`);
+    lines.push(`latency: ftut=${log.ftut}ms total=${log.use_time}ms`);
+    if (log.error) lines.push(`error: ${log.error}`);
+    const attempts = log.attempts ?? [];
+    if (attempts.length > 0) {
+        lines.push('');
+        lines.push(`attempts (${attempts.length}):`);
+        attempts.forEach((a, i) => {
+            lines.push(
+                `  ${i + 1}. #${a.attempt_num} ${a.status} ${a.channel_name}/${a.model_name} ${a.duration}ms` +
+                (a.sticky ? ' sticky' : '') +
+                (a.reason ? ` | reason=${a.reason}` : '') +
+                (a.msg ? ` | msg=${a.msg}` : ''),
+            );
+        });
+    }
+    return lines.join('\n');
+}
+
 export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogSiteActionTargets | null }) {
     const t = useTranslations('log.card');
     const displayActualModelName = useMemo(
@@ -536,6 +612,13 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
     const disableMutation = useUpdateSiteChannelModelDisabled();
 
     const hasError = !!log.error;
+    const lastAttempt = log.attempts && log.attempts.length > 0 ? log.attempts[log.attempts.length - 1] : null;
+    const outcomeMeta = getAttemptStatusMeta(
+        hasError ? (lastAttempt?.status ?? 'failed') : 'success',
+        t,
+        hasError ? (lastAttempt?.msg || log.error) : undefined,
+        lastAttempt?.reason,
+    );
     const hasAttempts = (log.attempts?.length ?? 0) > 0;
     const hasMultipleAttempts = (log.attempts?.length ?? 0) > 1;
     const [isDiagnosticExpanded, setIsDiagnosticExpanded] = useState(false);
@@ -648,6 +731,9 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                         <div className="min-w-0 flex flex-col gap-3">
                             <div className="flex items-start gap-3 min-w-0">
                                 <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                                    <Badge className={cn('h-5 shrink-0 px-1.5 text-[10px] font-bold uppercase shadow-none border-0', outcomeMeta.badgeClassName)}>
+                                        {outcomeMeta.label}
+                                    </Badge>
                                     <span className="font-semibold text-card-foreground truncate" title={log.request_model_name}>
                                         {log.request_model_name}
                                     </span>
@@ -803,6 +889,21 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                                                         {log.total_attempts || log.attempts!.length} {t('attempts')}
                                                     </Badge>
                                                 ) : null}
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                                    title={t('copyReport')}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const report = buildLogDiagnosticReport(log);
+                                                        void navigator.clipboard.writeText(report).then(
+                                                            () => toast.success(t('reportCopied')),
+                                                            () => toast.error(t('reportCopyFailed')),
+                                                        );
+                                                    }}
+                                                >
+                                                    <Copy className="size-4" />
+                                                </button>
                                                 {isDiagnosticExpanded ? (
                                                     <ChevronUp className="size-4 text-muted-foreground" />
                                                 ) : (
@@ -861,6 +962,7 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                                                                             && last.model_name === a.model_name
                                                                             && last.status === a.status
                                                                             && (last.msg ?? '') === (a.msg ?? '')
+                                                                            && (last.reason ?? '') === (a.reason ?? '')
                                                                         ) {
                                                                             last.repeat += 1;
                                                                             last.lastAttemptNum = a.attempt_num;
@@ -876,7 +978,7 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                                                                         });
                                                                     }
                                                                     return merged.map((attempt, idx) => {
-                                                                        const statusMeta = getAttemptStatusMeta(attempt.status, t);
+                                                                        const statusMeta = getAttemptStatusMeta(attempt.status, t, attempt.msg, attempt.reason);
                                                                         const attemptTarget = attemptTargets[attempt.originalIndex] ?? null;
                                                                         const canDisableAttempt = attempt.status === 'failed' && !!attemptTarget?.can_disable_model;
                                                                         const sanitizedMsg = sanitizeErrorMessage(attempt.msg);
@@ -929,6 +1031,11 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                                                                                         ) : null}
                                                                                     </div>
                                                                                 </div>
+                                                                                {attempt.reason ? (
+                                                                                    <div className="pl-2 border-l-2 border-border/60 text-[11px] leading-relaxed text-muted-foreground font-mono break-all">
+                                                                                        {t('routeReason')}: {attempt.reason}
+                                                                                    </div>
+                                                                                ) : null}
                                                                                 {sanitizedMsg ? (
                                                                                     <div className={cn('pl-2 border-l-2 text-[11px] leading-relaxed whitespace-pre-wrap wrap-break-word', statusMeta.messageClassName)}>
                                                                                         {sanitizedMsg}

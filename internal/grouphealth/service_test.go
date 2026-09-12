@@ -12,6 +12,7 @@ import (
 	dbpkg "github.com/xuanli27/octopus/internal/db"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
+	"github.com/xuanli27/octopus/internal/relay/balancer"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 )
 
@@ -34,6 +35,70 @@ func setupGroupHealthTestDB(t *testing.T) context.Context {
 	})
 
 	return context.Background()
+}
+
+func TestRunGroupHealthAppliesCircuitBreakerOnFailure(t *testing.T) {
+	ctx := setupGroupHealthTestDB(t)
+
+	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"upstream unavailable"}`, http.StatusInternalServerError)
+	}))
+	defer failServer.Close()
+
+	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","status":"completed"}`))
+	}))
+	defer okServer.Close()
+
+	// Lower threshold so a single hard failure trips Open after RecordFailure chain.
+	// Default threshold is 5; force 1 for this test.
+	if err := op.SettingSetString(model.SettingKeyCircuitBreakerThreshold, "1"); err != nil {
+		t.Fatalf("set threshold: %v", err)
+	}
+
+	bad := &model.Channel{
+		Name: "gh-circuit-bad", Type: outbound.OutboundTypeOpenAIResponse, Enabled: true,
+		BaseUrls: []model.BaseUrl{{URL: failServer.URL + "/v1"}}, Model: "probe-model",
+		Keys: []model.ChannelKey{{Enabled: true, ChannelKey: "sk-bad", Remark: "bad"}},
+	}
+	good := &model.Channel{
+		Name: "gh-circuit-good", Type: outbound.OutboundTypeOpenAIResponse, Enabled: true,
+		BaseUrls: []model.BaseUrl{{URL: okServer.URL + "/v1"}}, Model: "probe-model",
+		Keys: []model.ChannelKey{{Enabled: true, ChannelKey: "sk-good", Remark: "good"}},
+	}
+	if err := op.ChannelCreate(bad, ctx); err != nil {
+		t.Fatalf("ChannelCreate bad: %v", err)
+	}
+	if err := op.ChannelCreate(good, ctx); err != nil {
+		t.Fatalf("ChannelCreate good: %v", err)
+	}
+	group := &model.Group{Name: "gh-circuit-group", Mode: model.GroupModeFailover}
+	if err := op.GroupCreate(group, ctx); err != nil {
+		t.Fatalf("GroupCreate: %v", err)
+	}
+	if err := op.GroupItemAdd(&model.GroupItem{GroupID: group.ID, ChannelID: bad.ID, ModelName: "probe-model", Priority: 1, Weight: 1}, ctx); err != nil {
+		t.Fatalf("GroupItemAdd bad: %v", err)
+	}
+	if err := op.GroupItemAdd(&model.GroupItem{GroupID: group.ID, ChannelID: good.ID, ModelName: "probe-model", Priority: 2, Weight: 1}, ctx); err != nil {
+		t.Fatalf("GroupItemAdd good: %v", err)
+	}
+
+	service := NewService(op.NewGroupHealthRepository(), &Prober{CandidateTimeout: 5 * time.Second})
+	if err := service.RunGroupHealth(ctx, group.ID, model.GroupHealthProbeModeFull); err != nil {
+		t.Fatalf("RunGroupHealth: %v", err)
+	}
+
+	badKey := bad.GetChannelKey()
+	tripped, _ := balancer.IsTripped(bad.ID, badKey.ID, "probe-model")
+	if !tripped {
+		t.Fatalf("expected failed health probe to trip circuit for channel %d key %d", bad.ID, badKey.ID)
+	}
+	goodKey := good.GetChannelKey()
+	trippedGood, _ := balancer.IsTripped(good.ID, goodKey.ID, "probe-model")
+	if trippedGood {
+		t.Fatalf("successful probe should clear/not trip circuit for good channel")
+	}
 }
 
 func TestRunGroupHealthFailoverDoesNotMutateRuntimeStats(t *testing.T) {

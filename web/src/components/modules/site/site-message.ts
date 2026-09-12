@@ -62,22 +62,22 @@ function fallbackTranslate(locale: Locale, key: string, values?: Record<string, 
         case 'siteSync.errors.missingGroupKey':
             switch (locale) {
                 case 'en':
-                    return interpolate('Group "{groupKey}" has no available key. Create a key for this group on the site and sync again.', values);
+                    return interpolate('Upstream group "{groupKey}" has no available source key. Create or paste a source key for this group, then sync again.', values);
                 case 'zh_hant':
-                    return interpolate('分組「{groupKey}」沒有可用的 Key。請先到站點建立這個分組的 Key，再重新同步。', values);
+                    return interpolate('上游分組「{groupKey}」沒有可用的源密鑰。請先建立或貼上該分組的源密鑰，再重新同步。', values);
                 case 'zh_hans':
                 default:
-                    return interpolate('分组「{groupKey}」没有可用的 Key。请先到站点创建这个分组的 Key，再重新同步。', values);
+                    return interpolate('上游分组「{groupKey}」没有可用的源密钥。请先创建或粘贴该分组的源密钥，再重新同步。', values);
             }
         case 'siteSync.errors.missingGroupModelsOrKey':
             switch (locale) {
                 case 'en':
-                    return 'Failed to fetch models: the current group has no available models or key.';
+                    return 'Failed to fetch models: the current upstream group has no available models or source key.';
                 case 'zh_hant':
-                    return '獲取模型失敗：當前分組沒有可用模型或可用 Key';
+                    return '獲取模型失敗：當前上游分組沒有可用模型或可用源密鑰';
                 case 'zh_hans':
                 default:
-                    return '获取模型失败：当前分组没有可用模型或可用 Key';
+                    return '获取模型失败：当前上游分组没有可用模型或可用源密钥';
             }
         case 'siteImport.errors.invalidJson':
             switch (locale) {

@@ -32,6 +32,7 @@ import {
   useSyncAllSites,
   useSyncSiteAccount,
   useUpdateSite,
+  type SiteSyncResult,
 } from "@/api/endpoints/site";
 import { PageWrapper } from "@/components/common/PageWrapper";
 import { toast } from "@/components/common/Toast";
@@ -67,9 +68,17 @@ import {
 import { cn } from "@/lib/utils";
 import { useSettingStore } from "@/stores/setting";
 import { CheckinPanel } from "./CheckinPanel";
+import { SiteConnectStrip } from "./ConnectStrip";
 import { SiteEditDialog } from "./SiteEditDialog";
 import { BatchEditDialog } from "./BatchEditDialog";
 import { AccountEditDialog } from "./AccountEditDialog";
+import { useNavStore } from '@/components/modules/navbar';
+import {
+  SyncResultDialog,
+  formatSyncResultToast,
+  syncResultNeedsDetail,
+  type SyncResultDialogContext,
+} from "./SyncResultDialog";
 import {
   accountHasCheckinEnabled,
   accountMatchesCheckinFilters,
@@ -565,6 +574,7 @@ function estimateVisibleSiteCardHeight(item: VisibleSite, expanded: boolean) {
 }
 
 export function Site() {
+  const setActiveItem = useNavStore((s) => s.setActiveItem);
   const t = useTranslations();
   const tProxy = useTranslations('proxyPool');
   const locale = useSettingStore((state) => state.locale);
@@ -622,6 +632,9 @@ export function Site() {
   const [expandedSiteIds, setExpandedSiteIds] = useState<Set<number>>(
     () => new Set(),
   );
+  const [lastSyncResult, setLastSyncResult] =
+    useState<SyncResultDialogContext | null>(null);
+  const [syncResultOpen, setSyncResultOpen] = useState(false);
   const [syncingAccountIds, setSyncingAccountIds] = useState<Set<number>>(
     () => new Set(),
   );
@@ -1013,11 +1026,27 @@ export function Site() {
     setDeleteConfirm({ type: "account", id: account.id, name: account.name });
   }
 
-  async function handleSyncAccount(account: SiteAccount) {
+  async function handleSyncAccount(account: SiteAccount, site?: SiteRecord) {
     setSyncingAccountIds((current) => new Set(current).add(account.id));
     try {
-      const result = await syncSiteAccount.mutateAsync(account.id);
-      const summary = `${result.message}（${result.group_count} 个分组，${result.token_count} 个 Key，${result.model_count} 个模型）`;
+      const result: SiteSyncResult = await syncSiteAccount.mutateAsync(account.id);
+      const resolvedSite =
+        site ??
+        (sites ?? []).find(
+          (item) =>
+            item.id === account.site_id ||
+            item.accounts.some((a) => a.id === account.id),
+        );
+      const context: SyncResultDialogContext = {
+        siteName: resolvedSite?.name || `站点 #${account.site_id}`,
+        accountName: account.name,
+        siteId: resolvedSite?.id ?? account.site_id,
+        accountId: account.id,
+        result,
+      };
+      setLastSyncResult(context);
+
+      const summary = formatSyncResultToast(result);
       if (result.status === "failed") {
         toast.error(summary);
       } else if (result.status === "partial") {
@@ -1027,6 +1056,12 @@ export function Site() {
       } else {
         console.warn(`Unexpected site sync status: ${result.status}`);
         toast.error(summary);
+      }
+
+      // Always open detail when partial/failed or any group needs attention;
+      // pure full success stays toast-only to reduce noise.
+      if (syncResultNeedsDetail(result) || result.status !== "success") {
+        setSyncResultOpen(true);
       }
     } catch (syncError) {
       toast.error(translateSiteMessage(locale, getErrorMessage(syncError), t));
@@ -1759,7 +1794,7 @@ export function Site() {
                                     <IconActionButton
                                       label="同步账号"
                                       disabled={syncingAccountIds.has(account.id)}
-                                      onClick={() => handleSyncAccount(account)}
+                                      onClick={() => handleSyncAccount(account, site)}
                                     >
                                       <RefreshCw
                                         className={cn(
@@ -1853,6 +1888,18 @@ export function Site() {
                                         translateSiteMessage(locale, account.last_sync_message, t) || "等待首次同步"
                                       }
                                     />
+                                    {lastSyncResult?.accountId === account.id ? (
+                                      <button
+                                        type="button"
+                                        className="pl-4 text-left text-xs font-medium text-primary hover:underline"
+                                        onClick={() => setSyncResultOpen(true)}
+                                      >
+                                        查看最近同步明细
+                                        {lastSyncResult.result.group_results?.length
+                                          ? `（${lastSyncResult.result.group_results.length} 个上游分组）`
+                                          : ""}
+                                      </button>
+                                    ) : null}
                                     {supportsCheckin ? (
                                       accountHasCheckinEnabled(
                                         account,
@@ -1916,6 +1963,7 @@ export function Site() {
         childLayout={false}
         animateChildren={false}
       >
+        <SiteConnectStrip />
         <CheckinPanel
           sites={sites}
           inventory={inventory}
@@ -2126,6 +2174,20 @@ export function Site() {
         selectedSiteIds={selectedSiteIds}
         allTagNames={allTagNames}
         selectedSiteTags={selectedSiteTags}
+      />
+
+      <SyncResultDialog
+        open={syncResultOpen}
+        context={lastSyncResult}
+        onClose={() => setSyncResultOpen(false)}
+        onGoFixKeys={(ctx) => {
+          setSyncResultOpen(false);
+          jumpToSiteChannelAccount(ctx.siteId, ctx.accountId);
+        }}
+        onGoRoutes={() => {
+          setSyncResultOpen(false);
+          setActiveItem('group');
+        }}
       />
 
       <AccountEditDialog

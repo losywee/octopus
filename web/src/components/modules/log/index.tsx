@@ -9,6 +9,7 @@ import { VirtualizedGrid } from '@/components/common/VirtualizedGrid';
 import { useSearchStore } from '@/components/modules/toolbar';
 import { useToolbarViewOptionsStore } from '@/components/modules/toolbar/view-options-store';
 import { useLogUIStore } from './ui-store';
+import { cn } from '@/lib/utils';
 
 type LogFilters = {
     keyword: string;
@@ -17,6 +18,7 @@ type LogFilters = {
     channelIds: number[];
     startTime?: number;
     endTime?: number;
+    status: 'all' | 'success' | 'error';
 };
 
 const LOG_PAGE_SIZE = 10;
@@ -35,7 +37,8 @@ function filtersActive(filters: LogFilters) {
         !!filters.keyword.trim() ||
         filters.channelIds.length > 0 ||
         !!filters.startTime ||
-        !!filters.endTime
+        !!filters.endTime ||
+        filters.status !== 'all'
     );
 }
 
@@ -56,6 +59,8 @@ export function Log() {
     const logChannelIds = useToolbarViewOptionsStore((s) => s.logChannelIds);
     const logKeywordMode = useToolbarViewOptionsStore((s) => s.logKeywordMode);
     const logKeywordScope = useToolbarViewOptionsStore((s) => s.logKeywordScope);
+    const logStatus = useToolbarViewOptionsStore((s) => s.logStatus);
+    const setLogStatus = useToolbarViewOptionsStore((s) => s.setLogStatus);
     const filters = useMemo<LogFilters>(() => ({
         keyword: searchTerm,
         keywordMode: logKeywordMode,
@@ -63,7 +68,8 @@ export function Log() {
         channelIds: logChannelIds,
         startTime: logDateRange.start,
         endTime: logDateRange.end,
-    }), [logDateRange.end, logDateRange.start, logChannelIds, searchTerm, logKeywordMode, logKeywordScope]);
+        status: logStatus,
+    }), [logDateRange.end, logDateRange.start, logChannelIds, searchTerm, logKeywordMode, logKeywordScope, logStatus]);
     const debouncedFilters = useDebouncedValue(filters, 200);
     const filterMode = filtersActive(debouncedFilters);
     const logFilters = useMemo(() => ({
@@ -73,6 +79,7 @@ export function Log() {
         channel_ids: debouncedFilters.channelIds.length > 0 ? debouncedFilters.channelIds : undefined,
         start_time: debouncedFilters.startTime,
         end_time: debouncedFilters.endTime,
+        status: debouncedFilters.status !== 'all' ? debouncedFilters.status : undefined,
     }), [debouncedFilters]);
     const liveLogsQuery = useLogs({ pageSize: LOG_PAGE_SIZE, filters: logFilters, mode: filterMode ? 'paged' : 'stream' });
     const logs = liveLogsQuery.logs;
@@ -142,6 +149,29 @@ export function Log() {
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-3">
+            <div className="flex flex-none flex-wrap items-center gap-2 px-1">
+                {([
+                    { id: 'all' as const, label: t('statusFilter.all') },
+                    { id: 'error' as const, label: t('statusFilter.error') },
+                    { id: 'success' as const, label: t('statusFilter.success') },
+                ]).map((item) => (
+                    <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setLogStatus(item.id)}
+                        className={cn(
+                            'rounded-full border px-3 py-1 text-xs font-medium transition',
+                            logStatus === item.id
+                                ? item.id === 'error'
+                                    ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                                    : 'border-primary/40 bg-primary/10 text-primary'
+                                : 'border-border/70 bg-background/70 text-muted-foreground hover:bg-muted/50',
+                        )}
+                    >
+                        {item.label}
+                    </button>
+                ))}
+            </div>
             {warning ? (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                     {warning}

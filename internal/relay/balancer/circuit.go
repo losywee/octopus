@@ -2,6 +2,7 @@ package balancer
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,11 +45,22 @@ func circuitKey(channelID, keyID int, modelName string) string {
 }
 
 func resetCircuitBreakerByChannel(channelID int) {
-	prefix := fmt.Sprintf("%d:", channelID)
+	// Match exact channel ID segment (key format channelID:keyID:model...).
+	// Prefer splitting on first ":" so we never confuse 1 with 10 via naive prefixes.
 	globalBreaker.Range(func(key, _ any) bool {
-		if k, ok := key.(string); ok && strings.HasPrefix(k, prefix) {
-			globalBreaker.Delete(k)
+		k, ok := key.(string)
+		if !ok {
+			return true
 		}
+		idPart, _, ok := strings.Cut(k, ":")
+		if !ok {
+			return true
+		}
+		id, err := strconv.Atoi(idPart)
+		if err != nil || id != channelID {
+			return true
+		}
+		globalBreaker.Delete(k)
 		return true
 	})
 }
@@ -147,6 +159,77 @@ func IsTripped(channelID, keyID int, modelName string) (tripped bool, remaining 
 	default:
 		return false, 0
 	}
+}
+
+// CircuitSnapshot is a read-only view of one breaker entry for runtime dashboards.
+type CircuitSnapshot struct {
+	ChannelID           int    `json:"channel_id"`
+	ChannelKeyID        int    `json:"channel_key_id"`
+	ModelName           string `json:"model_name"`
+	State               string `json:"state"` // closed | open | half_open
+	ConsecutiveFailures int64  `json:"consecutive_failures"`
+	TripCount           int    `json:"trip_count"`
+	RemainingCooldownMS int64  `json:"remaining_cooldown_ms"`
+}
+
+// ListCircuitSnapshots returns breakers that are open/half-open or have failure history.
+// Used by the runtime ops dashboard (Phase C2).
+func ListCircuitSnapshots() []CircuitSnapshot {
+	out := make([]CircuitSnapshot, 0)
+	globalBreaker.Range(func(key, value any) bool {
+		k, ok := key.(string)
+		if !ok {
+			return true
+		}
+		entry, ok := value.(*circuitEntry)
+		if !ok || entry == nil {
+			return true
+		}
+		parts := strings.SplitN(k, ":", 3)
+		if len(parts) != 3 {
+			return true
+		}
+		var channelID, keyID int
+		fmt.Sscanf(parts[0], "%d", &channelID)
+		fmt.Sscanf(parts[1], "%d", &keyID)
+		modelName := parts[2]
+
+		entry.mu.Lock()
+		state := entry.State
+		failures := entry.ConsecutiveFailures
+		trips := entry.TripCount
+		lastFail := entry.LastFailureTime
+		entry.mu.Unlock()
+
+		if state == StateClosed && failures == 0 && trips == 0 {
+			return true
+		}
+
+		snap := CircuitSnapshot{
+			ChannelID:           channelID,
+			ChannelKeyID:        keyID,
+			ModelName:           modelName,
+			ConsecutiveFailures: failures,
+			TripCount:           trips,
+		}
+		switch state {
+		case StateOpen:
+			snap.State = "open"
+			cooldown := GetCooldown(trips)
+			remaining := cooldown - time.Since(lastFail)
+			if remaining < 0 {
+				remaining = 0
+			}
+			snap.RemainingCooldownMS = remaining.Milliseconds()
+		case StateHalfOpen:
+			snap.State = "half_open"
+		default:
+			snap.State = "closed"
+		}
+		out = append(out, snap)
+		return true
+	})
+	return out
 }
 
 // RecordSuccess 记录成功，重置熔断器状态

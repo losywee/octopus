@@ -80,6 +80,16 @@ export function SettingReliability() {
                 icon={TimerOff}
             />
 
+            <SettingSection title={t('requestTimeout.title')} tooltip={t('requestTimeout.hint')} />
+            <NumberFieldRow
+                settingKey={SettingKey.RelayRequestTimeout}
+                label={t('requestTimeout.seconds.label')}
+                placeholder={t('requestTimeout.seconds.placeholder')}
+                tooltip={t('requestTimeout.seconds.description')}
+                icon={Timer}
+                min={0}
+            />
+
             {/* 被动离群退役 */}
             <SettingSection title={t('outlierRetirement.title')} tooltip={t('outlierRetirement.hint')} />
             <SettingRow label={t('outlierRetirement.enabled.label')}>

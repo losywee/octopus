@@ -34,10 +34,17 @@
 
 ### 🐳 Docker 运行
 
+镜像同时发布到 **Docker Hub** 与 **GHCR**（Debian 默认 / Alpine 后缀 `-alpine`）：
+
+| 源 | 示例 |
+|----|------|
+| Docker Hub（推荐，国内拉一般更方便） | `qianduzzz/octopus:latest` |
+| GHCR | `ghcr.io/xuanli27/octopus:latest` |
+
 直接运行
 
 ```bash
-docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 ghcr.io/xuanli27/octopus
+docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 qianduzzz/octopus:latest
 ```
 
 或者使用 docker compose 运行
@@ -46,6 +53,9 @@ docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 ghcr.io/xua
 wget https://raw.githubusercontent.com/xuanli27/octopus/refs/heads/dev/docker-compose.yml
 docker compose up -d
 ```
+
+> Alpine 镜像：`qianduzzz/octopus:latest-alpine` 或 `ghcr.io/xuanli27/octopus:latest-alpine`  
+> 固定版本：把 `latest` 换成 tag，如 `v0.9.2` / `v0.9.2-alpine`
 
 
 ### 📦 从 Release 下载
@@ -59,9 +69,9 @@ docker compose up -d
 ### 🛠️ 源码运行
 
 **环境要求：**
-- Go 1.24.4
-- Node.js 18+
-- pnpm
+- Go 1.25.0
+- Node.js 22
+- pnpm 11.1.2
 
 ```bash
 # 克隆项目
@@ -256,14 +266,15 @@ http://localhost:3000
 
 ---
 
-### 📁 分组管理
+### 📁 分组管理（对外分组）
 
-分组用于将多个渠道聚合为一个统一的对外模型名称。
+**对外分组**用于将多个渠道聚合为一个统一的对外模型名称。
 
 **核心概念：**
 
-- **分组名称** 即程序对外暴露的模型名称
-- 调用 API 时，将请求中的 `model` 参数设置为分组名称即可
+- **对外分组名称** 即程序对外暴露的模型名称
+- 调用 API 时，将请求中的 `model` 参数设置为对外分组名称即可
+- 请勿与中转站里的**上游分组**混淆；四类易混概念见 [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)
 
 **负载均衡模式：**
 

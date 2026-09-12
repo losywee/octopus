@@ -20,7 +20,11 @@ type ChannelAttempt struct {
 	Status       AttemptStatus `json:"status"`
 	Duration     int           `json:"duration"`
 	Sticky       bool          `json:"sticky,omitempty"`
-	Msg          string        `json:"msg,omitempty"`
+	// Reason explains why this candidate was selected or visited
+	// (group mode, order, priority/weight, sticky preference).
+	// Outcome/error details stay in Msg.
+	Reason string `json:"reason,omitempty"`
+	Msg    string `json:"msg,omitempty"`
 }
 
 // RelayLogWSMode 表示本次上游 WebSocket 的会话/恢复模式。

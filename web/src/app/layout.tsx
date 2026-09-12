@@ -16,6 +16,11 @@ export default function RootLayout({
   return (
     <html suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('octopus-settings');if(!s)return;var j=JSON.parse(s);var th=j&&j.state&&j.state.colorTheme;if(th&&th!=='default'){document.documentElement.setAttribute('data-color-theme',th);}}catch(e){}})();`,
+          }}
+        />
         <meta name="theme-color" content="#eae9e3" />
         <meta name="application-name" content="Octopus" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

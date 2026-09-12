@@ -24,6 +24,10 @@ func setupAutoGroupTestDB(t *testing.T) {
 	groupCache.Clear()
 	groupMap.Clear()
 	channelCache.Clear()
+	settingCache.Clear()
+	if err := settingRefreshCache(t.Context()); err != nil {
+		t.Fatalf("settingRefreshCache failed: %v", err)
+	}
 }
 
 func groupModelNames(t *testing.T, groupID, channelID int) []string {
@@ -212,5 +216,206 @@ func TestMatchModelsForAutoGroupModes(t *testing.T) {
 	_, ok = matchModelsForAutoGroup(model.AutoGroupTypeRegex, model.Group{Name: "x", MatchRegex: "("}, models, 1)
 	if ok {
 		t.Fatalf("invalid regex should return ok=false")
+	}
+}
+
+func TestChannelAutoGroupCreateMissingExactCreatesGroups(t *testing.T) {
+	setupAutoGroupTestDB(t)
+	ctx := t.Context()
+
+	if err := SettingSetString(model.SettingKeyAutoGroupCreateMissingEnabled, "true"); err != nil {
+		t.Fatalf("enable create-missing: %v", err)
+	}
+
+	channel := testChannel("ch-create-missing", "gpt-4o,gpt-4o-mini", model.AutoGroupTypeExact)
+	if err := ChannelCreate(channel, ctx); err != nil {
+		t.Fatalf("ChannelCreate: %v", err)
+	}
+
+	ch, err := ChannelGet(channel.ID, ctx)
+	if err != nil {
+		t.Fatalf("ChannelGet: %v", err)
+	}
+	ChannelAutoGroupWithMode(ch, model.AutoGroupTypeExact, ctx)
+
+	groups, err := GroupList(ctx)
+	if err != nil {
+		t.Fatalf("GroupList: %v", err)
+	}
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups created, got %d (%+v)", len(groups), groups)
+	}
+
+	byName := map[string]model.Group{}
+	for _, g := range groups {
+		byName[g.Name] = g
+	}
+	for _, name := range []string{"gpt-4o", "gpt-4o-mini"} {
+		g, ok := byName[name]
+		if !ok {
+			t.Fatalf("missing group %q", name)
+		}
+		if g.Mode != model.GroupModeRoundRobin {
+			t.Fatalf("group %q mode = %v, want RoundRobin", name, g.Mode)
+		}
+		got := groupModelNames(t, g.ID, channel.ID)
+		if !hasAllModels(got, name) || len(got) != 1 {
+			t.Fatalf("group %q items = %v", name, got)
+		}
+	}
+}
+
+func TestChannelAutoGroupCreateMissingDisabledDoesNotCreate(t *testing.T) {
+	setupAutoGroupTestDB(t)
+	ctx := t.Context()
+
+	// default is false; be explicit
+	if err := SettingSetString(model.SettingKeyAutoGroupCreateMissingEnabled, "false"); err != nil {
+		t.Fatalf("disable create-missing: %v", err)
+	}
+
+	channel := testChannel("ch-no-create", "deepseek-r1", model.AutoGroupTypeExact)
+	if err := ChannelCreate(channel, ctx); err != nil {
+		t.Fatalf("ChannelCreate: %v", err)
+	}
+	ch, _ := ChannelGet(channel.ID, ctx)
+	ChannelAutoGroupWithMode(ch, model.AutoGroupTypeExact, ctx)
+
+	groups, err := GroupList(ctx)
+	if err != nil {
+		t.Fatalf("GroupList: %v", err)
+	}
+	if len(groups) != 0 {
+		t.Fatalf("expected no groups when create-missing disabled, got %+v", groups)
+	}
+}
+
+func TestChannelAutoGroupCreateMissingSkipsFuzzy(t *testing.T) {
+	setupAutoGroupTestDB(t)
+	ctx := t.Context()
+
+	if err := SettingSetString(model.SettingKeyAutoGroupCreateMissingEnabled, "true"); err != nil {
+		t.Fatalf("enable create-missing: %v", err)
+	}
+
+	channel := testChannel("ch-fuzzy-no-create", "claude-3-5-sonnet", model.AutoGroupTypeFuzzy)
+	if err := ChannelCreate(channel, ctx); err != nil {
+		t.Fatalf("ChannelCreate: %v", err)
+	}
+	ch, _ := ChannelGet(channel.ID, ctx)
+	ChannelAutoGroupWithMode(ch, model.AutoGroupTypeFuzzy, ctx)
+
+	groups, err := GroupList(ctx)
+	if err != nil {
+		t.Fatalf("GroupList: %v", err)
+	}
+	if len(groups) != 0 {
+		t.Fatalf("fuzzy must not create groups even when create-missing enabled, got %+v", groups)
+	}
+}
+
+func TestChannelAutoGroupExactNormalizeAttachesDatedModel(t *testing.T) {
+	setupAutoGroupTestDB(t)
+	ctx := t.Context()
+
+	if err := SettingSetString(model.SettingKeyAutoGroupNormalizeEnabled, "true"); err != nil {
+		t.Fatalf("enable normalize: %v", err)
+	}
+
+	group := &model.Group{Name: "gpt-4o", Mode: model.GroupModeRoundRobin}
+	if err := GroupCreate(group, ctx); err != nil {
+		t.Fatalf("GroupCreate: %v", err)
+	}
+
+	channel := testChannel("ch-dated", "gpt-4o-2024-08-06,openai/gpt-4o-mini", model.AutoGroupTypeExact)
+	if err := ChannelCreate(channel, ctx); err != nil {
+		t.Fatalf("ChannelCreate: %v", err)
+	}
+	ch, _ := ChannelGet(channel.ID, ctx)
+	ChannelAutoGroupWithMode(ch, model.AutoGroupTypeExact, ctx)
+
+	got := groupModelNames(t, group.ID, channel.ID)
+	if !hasAllModels(got, "gpt-4o-2024-08-06") {
+		t.Fatalf("expected dated model attached to gpt-4o group, got %v", got)
+	}
+	// gpt-4o-mini normalizes to a different public name — should not land in gpt-4o
+	if hasAllModels(got, "openai/gpt-4o-mini") {
+		t.Fatalf("gpt-4o-mini must not attach to gpt-4o group, got %v", got)
+	}
+}
+
+func TestChannelAutoGroupCreateMissingWithNormalizeUsesPublicName(t *testing.T) {
+	setupAutoGroupTestDB(t)
+	ctx := t.Context()
+
+	if err := SettingSetString(model.SettingKeyAutoGroupCreateMissingEnabled, "true"); err != nil {
+		t.Fatalf("enable create-missing: %v", err)
+	}
+	if err := SettingSetString(model.SettingKeyAutoGroupNormalizeEnabled, "true"); err != nil {
+		t.Fatalf("enable normalize: %v", err)
+	}
+
+	channel := testChannel("ch-norm-create", "gpt-4o-2024-08-06,openai/gpt-4o", model.AutoGroupTypeExact)
+	if err := ChannelCreate(channel, ctx); err != nil {
+		t.Fatalf("ChannelCreate: %v", err)
+	}
+	ch, _ := ChannelGet(channel.ID, ctx)
+	ChannelAutoGroupWithMode(ch, model.AutoGroupTypeExact, ctx)
+
+	groups, err := GroupList(ctx)
+	if err != nil {
+		t.Fatalf("GroupList: %v", err)
+	}
+	if len(groups) != 1 {
+		t.Fatalf("expected single normalized group, got %d (%+v)", len(groups), groups)
+	}
+	if groups[0].Name != "gpt-4o" {
+		t.Fatalf("expected public group name gpt-4o, got %q", groups[0].Name)
+	}
+	got := groupModelNames(t, groups[0].ID, channel.ID)
+	if !hasAllModels(got, "gpt-4o-2024-08-06", "openai/gpt-4o") || len(got) != 2 {
+		t.Fatalf("expected both upstream ids attached, got %v", got)
+	}
+}
+
+func TestChannelAutoGroupCreateMissingDoesNotDuplicateExisting(t *testing.T) {
+	setupAutoGroupTestDB(t)
+	ctx := t.Context()
+
+	if err := SettingSetString(model.SettingKeyAutoGroupCreateMissingEnabled, "true"); err != nil {
+		t.Fatalf("enable create-missing: %v", err)
+	}
+
+	existing := &model.Group{Name: "GPT-4o", Mode: model.GroupModeFailover}
+	if err := GroupCreate(existing, ctx); err != nil {
+		t.Fatalf("GroupCreate: %v", err)
+	}
+
+	channel := testChannel("ch-existing", "gpt-4o,new-model-x", model.AutoGroupTypeExact)
+	if err := ChannelCreate(channel, ctx); err != nil {
+		t.Fatalf("ChannelCreate: %v", err)
+	}
+	ch, _ := ChannelGet(channel.ID, ctx)
+	ChannelAutoGroupWithMode(ch, model.AutoGroupTypeExact, ctx)
+
+	groups, err := GroupList(ctx)
+	if err != nil {
+		t.Fatalf("GroupList: %v", err)
+	}
+	if len(groups) != 2 {
+		t.Fatalf("expected existing + one new group, got %d (%+v)", len(groups), groups)
+	}
+
+	// Existing casing preserved; item attached via EqualFold reconcile.
+	gotExisting := groupModelNames(t, existing.ID, channel.ID)
+	if !hasAllModels(gotExisting, "gpt-4o") {
+		t.Fatalf("expected existing group to receive gpt-4o, got %v", gotExisting)
+	}
+	reloaded, err := GroupGet(existing.ID, ctx)
+	if err != nil {
+		t.Fatalf("GroupGet: %v", err)
+	}
+	if reloaded.Mode != model.GroupModeFailover {
+		t.Fatalf("existing group mode should be preserved, got %v", reloaded.Mode)
 	}
 }

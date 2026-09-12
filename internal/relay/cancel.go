@@ -11,6 +11,7 @@ import (
 var (
 	errLocalRelayBudgetExceeded = errors.New("local relay budget exceeded")
 	errFirstTokenTimeout        = errors.New("first token timeout")
+	errRequestTimeout           = errors.New("request timeout")
 )
 
 func contextError(ctx context.Context) error {
@@ -43,9 +44,20 @@ func isFirstTokenTimeout(ctx context.Context, err error) bool {
 	return errors.Is(context.Cause(ctx), errFirstTokenTimeout)
 }
 
+func isRequestTimeout(ctx context.Context, err error) bool {
+	if errors.Is(err, errRequestTimeout) {
+		return true
+	}
+	if ctx == nil {
+		return false
+	}
+	return errors.Is(context.Cause(ctx), errRequestTimeout)
+}
+
 func isClientCancellation(ctx context.Context, err error) bool {
 	if isLocalRelayBudgetExceeded(ctx, err) || isLocalRelayBudgetExceeded(ctx, contextError(ctx)) ||
-		isFirstTokenTimeout(ctx, err) || isFirstTokenTimeout(ctx, contextError(ctx)) {
+		isFirstTokenTimeout(ctx, err) || isFirstTokenTimeout(ctx, contextError(ctx)) ||
+		isRequestTimeout(ctx, err) || isRequestTimeout(ctx, contextError(ctx)) {
 		return false
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

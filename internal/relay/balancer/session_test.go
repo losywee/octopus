@@ -17,3 +17,31 @@ func TestDeleteStickyRemovesSession(t *testing.T) {
 		t.Fatalf("expected sticky session to be deleted, got %#v", entry)
 	}
 }
+
+
+func TestListStickySnapshotsDropsStale(t *testing.T) {
+	Reset()
+	SetSticky(1, "fresh", 10, 100)
+	globalSession.Store(sessionKey(2, "stale"), &SessionEntry{
+		ChannelID:    20,
+		ChannelKeyID: 200,
+		Timestamp:    time.Now().Add(-25 * time.Hour),
+	})
+	snaps := ListStickySnapshots(0)
+	if len(snaps) != 1 || snaps[0].RequestModel != "fresh" {
+		t.Fatalf("expected only fresh sticky, got %+v", snaps)
+	}
+	if GetSticky(2, "stale", time.Hour) != nil {
+		t.Fatal("stale sticky should have been deleted by list")
+	}
+}
+
+func TestListStickySnapshotsFilterByChannel(t *testing.T) {
+	Reset()
+	SetSticky(1, "a", 10, 1)
+	SetSticky(2, "b", 20, 2)
+	snaps := ListStickySnapshots(10)
+	if len(snaps) != 1 || snaps[0].ChannelID != 10 {
+		t.Fatalf("filter by channel failed: %+v", snaps)
+	}
+}

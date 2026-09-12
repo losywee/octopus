@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 从 https://models.dev/api.json 获取 LLM 价格数据，
 生成 internal/price/presets.go 文件

@@ -30,7 +30,13 @@ type siteBatchAccount struct {
 	account *model.SiteAccount
 }
 
+var accountSync = newAccountSyncCoordinator()
+
 func SyncAccount(ctx context.Context, accountID int) (*model.SiteSyncResult, error) {
+	return accountSync.do(ctx, accountID, syncAccountOnce)
+}
+
+func syncAccountOnce(ctx context.Context, accountID int) (*model.SiteSyncResult, error) {
 	siteRecord, account, err := loadSiteAccount(ctx, accountID)
 	if err != nil {
 		return nil, sanitizeSiteError(err)
@@ -150,13 +156,37 @@ func SyncAll(ctx context.Context) {
 
 func SyncAllWithOptions(ctx context.Context, opts SiteBatchOptions) SiteBatchSummary {
 	trigger := normalizedSiteBatchTrigger(opts.Trigger)
+	// Reserve the durable job before loading the site list, but defer lease
+	// acquisition until we know the actual batch size. This keeps a failed list
+	// request visible in history without briefly blocking another worker.
+	queuedSummary := newSiteBatchSummary(SiteBatchPhaseSync, opts, 0)
+	jobRun, err := prepareSiteSyncJob(opts)
+	if err != nil {
+		queuedSummary.ErrorMessage = sanitizeSiteStatusMessage(err)
+		queuedSummary.finish()
+		queuedSummary.emitLog()
+		log.Warnw("sitesync.sync.job_create_failed", "trigger", string(trigger), "message", queuedSummary.ErrorMessage)
+		return *queuedSummary
+	}
+	queuedSummary.JobID = jobRun.id
 	sites, err := op.SiteList(ctx)
 	if err != nil {
-		log.Warnw("sitesync.sync.list_failed", "trigger", string(trigger), "reason", string(siteBatchReason(err)), "message", sanitizeSiteStatusMessage(err))
-		return SiteBatchSummary{Phase: SiteBatchPhaseSync, Trigger: trigger}
+		summary := queuedSummary
+		summary.ErrorMessage = sanitizeSiteStatusMessage(err)
+		summary.finish()
+		jobRun.finish(summary)
+		summary.emitLog()
+		log.Warnw("sitesync.sync.list_failed", "job_id", summary.JobID, "trigger", string(trigger), "reason", string(siteBatchReason(err)), "message", summary.ErrorMessage)
+		return *summary
 	}
 	defer markLastSyncAllTime()
-	return syncBatchAccounts(ctx, eligibleSyncAccounts(sites), opts)
+	items := eligibleSyncAccounts(sites)
+	// The job is created before loading the site list so list failures are
+	// durable too. Pass its ID into the actual batch to avoid a second record.
+	if jobRun.id > 0 {
+		opts.JobID = jobRun.id
+	}
+	return syncBatchAccounts(ctx, items, opts)
 }
 
 func SyncAccountsWithOptions(ctx context.Context, accountIDs []int, opts SiteBatchOptions) SiteBatchSummary {
@@ -180,23 +210,80 @@ func syncBatchAccounts(ctx context.Context, items []siteBatchAccount, opts SiteB
 	// Individual account messages are stored on the account status; console logs
 	// stay aggregated to avoid leaking upstream HTML and overwhelming operators.
 	summary := newSiteBatchSummary(SiteBatchPhaseSync, opts, len(items))
-	defer summary.emitLog()
+	jobRun, acquired, beginErr := beginSiteSyncJob(ctx, summary, opts)
+	if beginErr != nil {
+		summary.ErrorMessage = sanitizeSiteStatusMessage(beginErr)
+		summary.finish()
+		jobRun.finish(summary)
+		summary.emitLog()
+		return *summary
+	}
+	if !acquired {
+		recordBatchSkipped(summary, items, SiteBatchReasonAlreadyRunning)
+		summary.finish()
+		jobRun.finish(summary)
+		summary.emitLog()
+		return *summary
+	}
+	runtimeRun, accepted := siteSyncRuntime.begin(summary)
+	if !accepted {
+		if runtimeStatus := SiteSyncRuntimeStatusSnapshot(); runtimeStatus.JobID > 0 && runtimeStatus.JobID != summary.JobID {
+			summary.BlockedByJobID = runtimeStatus.JobID
+		}
+		recordBatchSkipped(summary, items, SiteBatchReasonAlreadyRunning)
+		summary.finish()
+		jobRun.finish(summary)
+		summary.emitLog()
+		return *summary
+	}
+	defer func() {
+		runtimeRun.finish(summary)
+		jobRun.finish(summary)
+		summary.emitLog()
+	}()
+	workerCtx := jobRun.context(ctx)
 	for i := 0; i < len(items); i++ {
 		item := items[i]
-		if !waitSiteBatchInterval(ctx, 500*time.Millisecond) {
-			summary.markCanceled(ctx.Err())
-			recordBatchCanceledSkips(summary, items[i:])
+		if jobRun.leaseWasLost() {
+			markSiteBatchLeaseLost(summary, items, i)
+			runtimeRun.update(summary)
+			jobRun.update(summary)
 			return *summary
 		}
-		result, err := SyncAccount(ctx, item.account.ID)
+		if !waitSiteBatchInterval(workerCtx, 500*time.Millisecond) {
+			if jobRun.leaseWasLost() {
+				markSiteBatchLeaseLost(summary, items, i)
+			} else {
+				summary.markCanceled(workerCtx.Err())
+				recordBatchSkipped(summary, items[i:], SiteBatchReasonBatchCanceled)
+			}
+			runtimeRun.update(summary)
+			jobRun.update(summary)
+			return *summary
+		}
+		runtimeRun.startAccount(item.account.ID)
+		result, err := SyncAccount(workerCtx, item.account.ID)
+		runtimeRun.finishAccount(item.account.ID)
+		if jobRun.leaseWasLost() {
+			markSiteBatchLeaseLost(summary, items, i)
+			runtimeRun.update(summary)
+			jobRun.update(summary)
+			return *summary
+		}
 		if err != nil {
 			summary.recordFailure(item.site.ID, item.site.Platform, item.account.ID, err)
+			runtimeRun.update(summary)
+			jobRun.update(summary)
 			if IsCloudflareProtectionError(err) || siteBatchReason(err) == SiteBatchReasonCloudflareProtection {
-				i = recordCloudflareSkipsAndWait(ctx, summary, items, i, CloudflareRetryAfter(err))
+				i = recordCloudflareSkipsAndWait(workerCtx, summary, items, i, CloudflareRetryAfter(err))
+				runtimeRun.update(summary)
+				jobRun.update(summary)
 			}
 			continue
 		}
 		summary.recordResult(item.site.ID, item.site.Platform, item.account.ID, result.Status, result.Message)
+		runtimeRun.update(summary)
+		jobRun.update(summary)
 	}
 	return *summary
 }
@@ -303,9 +390,28 @@ func recordCloudflareSkipsAndWait(ctx context.Context, summary *SiteBatchSummary
 }
 
 func recordBatchCanceledSkips(summary *SiteBatchSummary, items []siteBatchAccount) {
+	recordBatchSkipped(summary, items, SiteBatchReasonBatchCanceled)
+}
+
+func recordBatchSkipped(summary *SiteBatchSummary, items []siteBatchAccount, reason SiteBatchReason) {
 	for _, item := range items {
-		summary.recordSkip(item.site.ID, item.site.Platform, SiteBatchReasonBatchCanceled, 1)
+		summary.recordSkip(item.site.ID, item.site.Platform, reason, 1)
 	}
+}
+
+func markSiteBatchLeaseLost(summary *SiteBatchSummary, items []siteBatchAccount, from int) {
+	if summary == nil {
+		return
+	}
+	if from < 0 {
+		from = 0
+	}
+	if from > len(items) {
+		from = len(items)
+	}
+	summary.Canceled = true
+	summary.CancelReason = SiteBatchReasonLeaseLost
+	recordBatchSkipped(summary, items[from:], SiteBatchReasonLeaseLost)
 }
 
 func waitSiteBatchInterval(ctx context.Context, delay time.Duration) bool {

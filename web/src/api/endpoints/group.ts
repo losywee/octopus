@@ -143,6 +143,8 @@ export interface GroupAutoGroupSource {
 
 export interface GroupAutoGroupConfig {
     projected_global_auto_group: AutoGroupType;
+    create_missing_groups: boolean;
+    normalize_model_names: boolean;
     sources: GroupAutoGroupSource[];
 }
 
@@ -153,6 +155,8 @@ export interface GroupAutoGroupSourceUpdateRequest {
 
 export interface GroupAutoGroupConfigUpdateRequest {
     projected_global_auto_group?: AutoGroupType;
+    create_missing_groups?: boolean;
+    normalize_model_names?: boolean;
     items?: GroupAutoGroupSourceUpdateRequest[];
     run_now?: boolean;
 }
@@ -205,6 +209,8 @@ export function useCreateGroup() {
         onSuccess: (data) => {
             logger.log('分组创建成功:', data);
             queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            queryClient.invalidateQueries({ queryKey: ['runtime'] });
+            queryClient.invalidateQueries({ queryKey: ['group-health'] });
         },
         onError: (error) => {
             logger.error('分组创建失败:', error);
@@ -303,6 +309,8 @@ export function useUpdateGroup() {
         },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            queryClient.invalidateQueries({ queryKey: ['runtime'] });
+            queryClient.invalidateQueries({ queryKey: ['group-health'] });
         },
     });
 }
@@ -325,6 +333,8 @@ export function useDeleteGroup() {
         onSuccess: () => {
             logger.log('分组删除成功');
             queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            queryClient.invalidateQueries({ queryKey: ['runtime'] });
+            queryClient.invalidateQueries({ queryKey: ['group-health'] });
         },
         onError: (error) => {
             logger.error('分组删除失败:', error);
@@ -347,6 +357,9 @@ function invalidateAutoGroupRelated(queryClient: ReturnType<typeof useQueryClien
     queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
     queryClient.invalidateQueries({ queryKey: ['site-channel', 'list'] });
     queryClient.invalidateQueries({ queryKey: ['settings', 'list'] });
+    queryClient.invalidateQueries({ queryKey: ['runtime'] });
+    queryClient.invalidateQueries({ queryKey: ['group-health'] });
+    queryClient.invalidateQueries({ queryKey: ['public-models', 'pending'] });
 }
 
 export function useUpdateGroupAutoGroupConfig() {

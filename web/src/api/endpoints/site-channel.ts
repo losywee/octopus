@@ -439,6 +439,10 @@ function invalidateSiteChannelAndRelated(queryClient: ReturnType<typeof useQuery
     queryClient.invalidateQueries({ queryKey: ['site-channel', 'list'] });
     queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
     queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
+    queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+    queryClient.invalidateQueries({ queryKey: ['runtime'] });
+    queryClient.invalidateQueries({ queryKey: ['group-health'] });
+    queryClient.invalidateQueries({ queryKey: ['public-models', 'pending'] });
 }
 
 export function useSiteChannelList(options: { includeHistory?: boolean } = {}) {
@@ -485,6 +489,37 @@ export function useCreateSiteChannelKey(siteId: number, accountId: number) {
         },
         onError: (error) => {
             logger.error('site channel key create failed:', error);
+        },
+    });
+}
+
+export type EnsurePublicGroupsResult = {
+    account_id: number;
+    site_id: number;
+    channels_processed: number;
+    groups_created: number;
+    items_added: number;
+    created_group_names?: string[];
+    normalize: boolean;
+    message: string;
+};
+
+/** One-shot: exact-match attach + create missing public groups for projected channels. */
+export function useEnsureSitePublicGroups(siteId: number, accountId: number) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async () =>
+            apiClient.post<EnsurePublicGroupsResult>(
+                getAccountPath(siteId, accountId, '/ensure-public-groups'),
+                {},
+            ),
+        onSuccess: () => {
+            invalidateSiteChannelAndRelated(queryClient);
+            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+        },
+        onError: (error) => {
+            logger.error('ensure public groups failed:', error);
         },
     });
 }

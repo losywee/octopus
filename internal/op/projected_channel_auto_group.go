@@ -42,6 +42,10 @@ func EffectiveProjectedChannelAutoGroup(channel model.Channel) model.AutoGroupTy
 // channel that match the rule; existing items for this channel in that group
 // that are not desired are removed, missing ones are added. Manual removals of
 // non-matching models therefore survive the next site sync.
+//
+// When exact matching is used and auto_group_create_missing_enabled is true,
+// models without a case-insensitive group name match also get a new Group
+// created and attached (see ensureMissingExactGroups).
 func ChannelAutoGroupWithMode(channel *model.Channel, autoGroup model.AutoGroupType, ctx context.Context) {
 	if channel == nil || autoGroup == model.AutoGroupTypeNone {
 		return
@@ -54,16 +58,226 @@ func ChannelAutoGroupWithMode(channel *model.Channel, autoGroup model.AutoGroupT
 
 	channelModelNames := splitChannelModelNames(channel.Model, channel.CustomModel)
 
+	// Alias dictionary for exact matching (public name / aliases).
+	var aliasIdx *publicAliasIndex
+	if autoGroup == model.AutoGroupTypeExact {
+		if idx, err := loadPublicAliasIndex(ctx); err != nil {
+			log.Warnf("load public model aliases failed (channel=%d): %v", channel.ID, err)
+		} else {
+			aliasIdx = idx
+		}
+	}
+
 	for _, group := range groups {
 		desired, ok := matchModelsForAutoGroup(autoGroup, group, channelModelNames, channel.ID)
 		if !ok {
-			// Rule unusable (e.g. bad regex) — leave existing items alone.
 			continue
+		}
+		if autoGroup == model.AutoGroupTypeExact && aliasIdx != nil {
+			// Also attach models whose resolved public name equals this group name.
+			desired = mergeUniqueStrings(desired, modelsResolvedToPublic(channelModelNames, group.Name, aliasIdx))
 		}
 		if err := reconcileGroupItemsForChannel(group, channel.ID, desired, ctx); err != nil {
 			log.Warnf("auto group reconcile failed (channel=%d group=%d): %v", channel.ID, group.ID, err)
 		}
 	}
+
+	if autoGroup == model.AutoGroupTypeExact && AutoGroupCreateMissingEnabled() {
+		if err := ensureMissingExactGroups(channel.ID, channelModelNames, groups, ctx); err != nil {
+			log.Warnf("auto group create-missing failed (channel=%d): %v", channel.ID, err)
+		}
+	}
+}
+
+func modelsResolvedToPublic(channelModelNames []string, publicName string, idx *publicAliasIndex) []string {
+	if idx == nil || strings.TrimSpace(publicName) == "" {
+		return nil
+	}
+	useNorm := AutoGroupNormalizeEnabled()
+	out := make([]string, 0)
+	for _, up := range channelModelNames {
+		pub, via := ResolvePublicModelName(up, idx, useNorm)
+		if via == "none" || via == "normalize_local" {
+			// normalize_local alone is not dictionary resolution for matching existing groups
+			// (PublicModelNamesMatch already covers normalize to group name).
+			if via == "normalize_local" && PublicModelNamesMatch(up, publicName, true) {
+				out = append(out, up)
+			}
+			continue
+		}
+		if strings.EqualFold(pub, publicName) {
+			out = append(out, up)
+		}
+	}
+	return out
+}
+
+func mergeUniqueStrings(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	out := make([]string, 0, len(base)+len(extra))
+	for _, s := range base {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, s := range extra {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
+}
+
+// AutoGroupCreateMissingEnabled reports whether exact-match auto-group may
+// create groups for models that do not yet have a matching group name.
+func AutoGroupCreateMissingEnabled() bool {
+	enabled, err := SettingGetBool(model.SettingKeyAutoGroupCreateMissingEnabled)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+// AutoGroupNormalizeEnabled reports whether exact-match compares/creates
+// groups using NormalizePublicModelName (strip provider prefix + date suffix).
+func AutoGroupNormalizeEnabled() bool {
+	enabled, err := SettingGetBool(model.SettingKeyAutoGroupNormalizeEnabled)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+// ensureMissingExactGroups creates RoundRobin groups for models that have no
+// existing group match. With normalize enabled, the group name uses the
+// normalized public form (e.g. gpt-4o-2024-08-06 → gpt-4o) while the group
+// item keeps the original upstream model id.
+func ensureMissingExactGroups(channelID int, channelModelNames []string, existingGroups []model.Group, ctx context.Context) error {
+	if channelID <= 0 || len(channelModelNames) == 0 {
+		return nil
+	}
+	normalize := AutoGroupNormalizeEnabled()
+	aliasIdx, _ := loadPublicAliasIndex(ctx)
+
+	existingByLower := make(map[string]struct{}, len(existingGroups)*2)
+	for _, group := range existingGroups {
+		name := strings.TrimSpace(group.Name)
+		if name == "" {
+			continue
+		}
+		existingByLower[strings.ToLower(name)] = struct{}{}
+		if normalize {
+			if n := NormalizePublicModelName(name); n != "" {
+				existingByLower[strings.ToLower(n)] = struct{}{}
+			}
+		}
+	}
+
+	// public group name (lower) → first original model that needs attaching
+	type pendingCreate struct {
+		groupName  string
+		modelNames []string
+	}
+	pendingByLower := make(map[string]*pendingCreate)
+
+	for _, modelName := range channelModelNames {
+		trimmed := strings.TrimSpace(modelName)
+		if trimmed == "" {
+			continue
+		}
+		// Already matched an existing group via exact/normalize reconcile.
+		matchedExisting := false
+		for _, group := range existingGroups {
+			if PublicModelNamesMatch(trimmed, group.Name, normalize) {
+				matchedExisting = true
+				break
+			}
+		}
+		if matchedExisting {
+			continue
+		}
+
+		// Prefer alias dictionary public name when resolving create-missing.
+		groupName := trimmed
+		if aliasIdx != nil {
+			if pub, via := ResolvePublicModelName(trimmed, aliasIdx, normalize); via != "none" && pub != "" {
+				if via != "normalize_local" || len(aliasIdx.byExact) == 0 {
+					groupName = pub
+				} else if normalize {
+					if n := NormalizePublicModelName(trimmed); n != "" {
+						groupName = n
+					}
+				}
+			} else if normalize {
+				if n := NormalizePublicModelName(trimmed); n != "" {
+					groupName = n
+				}
+			}
+		} else if normalize {
+			if n := NormalizePublicModelName(trimmed); n != "" {
+				groupName = n
+			}
+		}
+		lower := strings.ToLower(groupName)
+		if _, ok := existingByLower[lower]; ok {
+			continue
+		}
+		if entry, ok := pendingByLower[lower]; ok {
+			// Multiple upstream ids collapse to the same public group.
+			dup := false
+			for _, have := range entry.modelNames {
+				if have == trimmed {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				entry.modelNames = append(entry.modelNames, trimmed)
+			}
+			continue
+		}
+		pendingByLower[lower] = &pendingCreate{
+			groupName:  groupName,
+			modelNames: []string{trimmed},
+		}
+	}
+
+	for _, entry := range pendingByLower {
+		group := &model.Group{
+			Name: entry.groupName,
+			Mode: model.GroupModeRoundRobin,
+		}
+		if err := GroupCreate(group, ctx); err != nil {
+			if existing, getErr := GroupGetEnabledMap(entry.groupName, ctx); getErr == nil && existing.ID > 0 {
+				items := make([]model.GroupIDAndLLMName, 0, len(entry.modelNames))
+				for _, mn := range entry.modelNames {
+					items = append(items, model.GroupIDAndLLMName{ChannelID: channelID, ModelName: mn})
+				}
+				if addErr := GroupItemBatchAdd(existing.ID, items, ctx); addErr != nil {
+					return addErr
+				}
+				existingByLower[strings.ToLower(entry.groupName)] = struct{}{}
+				continue
+			}
+			return err
+		}
+		items := make([]model.GroupIDAndLLMName, 0, len(entry.modelNames))
+		for _, mn := range entry.modelNames {
+			items = append(items, model.GroupIDAndLLMName{ChannelID: channelID, ModelName: mn})
+		}
+		if err := GroupItemBatchAdd(group.ID, items, ctx); err != nil {
+			return err
+		}
+		existingByLower[strings.ToLower(entry.groupName)] = struct{}{}
+	}
+	return nil
 }
 
 // matchModelsForAutoGroup returns channel models that should belong to group
@@ -73,8 +287,9 @@ func matchModelsForAutoGroup(autoGroup model.AutoGroupType, group model.Group, c
 	matchedModelNames := make([]string, 0)
 	switch autoGroup {
 	case model.AutoGroupTypeExact:
+		normalize := AutoGroupNormalizeEnabled()
 		for _, modelName := range channelModelNames {
-			if strings.EqualFold(modelName, group.Name) {
+			if PublicModelNamesMatch(modelName, group.Name, normalize) {
 				matchedModelNames = append(matchedModelNames, modelName)
 			}
 		}

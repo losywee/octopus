@@ -9,7 +9,9 @@ import {
     Activity,
     TrendingUp,
     Globe,
-    Key
+    Key,
+    RefreshCw,
+    ShieldAlert,
 } from 'lucide-react';
 import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest } from '@/api/endpoints/channel';
 import {
@@ -28,12 +30,16 @@ import { formatMoney } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useJumpStore } from '@/stores/jump';
+import { useRuntimeOverview } from '@/api/endpoints/runtime';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function CardContent({ channel, stats }: { channel: Channel; stats: StatsMetricsFormatted }) {
     const { setIsOpen } = useMorphingDialog();
     const updateChannel = useUpdateChannel();
     const deleteChannel = useDeleteChannel();
     const requestJump = useJumpStore((state) => state.requestJump);
+    const queryClient = useQueryClient();
+    const { data: runtime, isFetching: runtimeFetching, refetch: refetchRuntime } = useRuntimeOverview(true, channel.id);
     const [isEditing, setIsEditing] = useState(false);
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [formData, setFormData] = useState<ChannelFormData>({
@@ -153,9 +159,13 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
 
         updateChannel.mutate(req, {
             onSuccess: () => {
+                toast.success('渠道已更新 · 熔断/会话粘性/近1h失败率已刷新');
                 setIsEditing(false);
                 setIsOpen(false);
-            }
+            },
+            onError: (error) => {
+                toast.error(error.message || '渠道更新失败');
+            },
         });
     };
 
@@ -247,6 +257,95 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                         ) : null}
                                     </section>
                                 ) : null}
+
+                                <section className="rounded-2xl border border-border/70 bg-background/70 p-3 sm:p-4">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                            <ShieldAlert className="size-4 text-amber-600" />
+                                            运行态
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="inline-flex items-center gap-1 rounded-full border border-border/70 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-muted/50"
+                                            onClick={() => {
+                                                void refetchRuntime();
+                                                queryClient.invalidateQueries({ queryKey: ['runtime'] });
+                                            }}
+                                        >
+                                            <RefreshCw className={cn('size-3.5', runtimeFetching && 'animate-spin')} />
+                                            {runtimeFetching ? '刷新中' : '刷新'}
+                                        </button>
+                                    </div>
+                                    <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                                        <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2">
+                                            <div>熔断</div>
+                                            <div className="mt-1 text-sm font-semibold text-foreground">
+                                                {(runtime?.open_circuits ?? 0) + (runtime?.half_open_circuits ?? 0)}
+                                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                                    (open {runtime?.open_circuits ?? 0} / half {runtime?.half_open_circuits ?? 0})
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2">
+                                            <div>近1h 失败率</div>
+                                            <div className="mt-1 text-sm font-semibold text-foreground">
+                                                {runtime?.channel_health?.[0]
+                                                    ? `${runtime.channel_health[0].fail_rate.toFixed(0)}%`
+                                                    : '—'}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2">
+                                            <div>近1h 成功/失败</div>
+                                            <div className="mt-1 text-sm font-semibold text-foreground">
+                                                {runtime?.channel_health?.[0]
+                                                    ? `${runtime.channel_health[0].request_success}/${runtime.channel_health[0].request_failed}`
+                                                    : '—'}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2 sm:col-span-3">
+                                            <div>粘性会话</div>
+                                            <div className="mt-1 text-sm font-semibold text-foreground">
+                                                {runtime?.sticky_count ?? 0}
+                                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                                    编辑/启停渠道后会清空
+                                                </span>
+                                            </div>
+                                            {(runtime?.sticky_sessions?.length ?? 0) > 0 ? (
+                                                <div className="mt-1 space-y-1">
+                                                    {runtime!.sticky_sessions!.slice(0, 3).map((s) => (
+                                                        <div key={`${s.api_key_id}-${s.request_model}-${s.channel_key_id}`} className="text-[11px] text-muted-foreground">
+                                                            key#{s.api_key_id} · {s.request_model} · {Math.round(s.age_ms / 1000)}s前
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    {(runtime?.circuits?.length ?? 0) > 0 ? (
+                                        <div className="mt-2 space-y-1">
+                                            {runtime!.circuits!.slice(0, 4).map((c) => (
+                                                <div
+                                                    key={`${c.channel_key_id}-${c.model_name}-${c.state}`}
+                                                    className="rounded-lg border border-border/50 bg-muted/20 px-2 py-1.5 text-[11px]"
+                                                >
+                                                    <span className="font-medium text-foreground">{c.model_name}</span>
+                                                    <span className="mx-1.5 text-muted-foreground">·</span>
+                                                    <span className="text-amber-700 dark:text-amber-300">{c.state}</span>
+                                                    {c.remaining_cooldown_ms > 0 ? (
+                                                        <span className="text-muted-foreground">
+                                                            {' '}· 剩余 {Math.ceil(c.remaining_cooldown_ms / 1000)}s
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="mt-2 text-[11px] text-muted-foreground">
+                                            当前无熔断条目。编辑密钥/地址/启停后，熔断与近1h窗口会自动清空。
+                                        </p>
+                                    )}
+                                </section>
+
                                 <dl className="grid gap-3 grid-cols-1 sm:grid-cols-3">
                                     <div className="rounded-2xl border bg-linear-to-br from-chart-1/10 to-chart-1/5 p-3 sm:p-4">
                                         <dt className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground">

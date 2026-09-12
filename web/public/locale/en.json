@@ -44,14 +44,18 @@
     "supportedModels": "Supported Models"
   },
   "navbar": {
-    "home": "Home",
-    "site": "Site",
-    "channel": "Channel",
-    "group": "Group",
-    "key": "Key",
-    "model": "Price",
-    "log": "Log",
-    "setting": "Setting"
+    "home": "Overview",
+    "site": "Connect",
+    "channel": "Channels",
+    "group": "Routes",
+    "key": "Keys",
+    "model": "Pricing",
+    "log": "Traffic",
+    "setting": "Settings",
+    "connect": "Connect",
+    "route": "Routes",
+    "traffic": "Traffic",
+    "more": "More"
   },
   "toolbar": {
     "popover": {
@@ -217,6 +221,15 @@
     "groupHealth": {
       "label": "Group Health Checks",
       "description": "When enabled, show the home health summary, group-card health status, and allow manual health checks."
+    },
+    "requestTimeout": {
+      "title": "Non-stream request timeout",
+      "hint": "Applies to non-stream upstream requests only. 0 means unlimited (still follows client disconnect). For streams use group first-token timeout.",
+      "seconds": {
+        "label": "Timeout (seconds)",
+        "placeholder": "0",
+        "description": "Seconds. On timeout the attempt fails and may failover instead of hanging forever."
+      }
     },
     "circuitBreaker": {
       "title": "Circuit Breaker",
@@ -523,6 +536,54 @@
       "modifiedAt": "Modified",
       "refresh": "Refresh",
       "notConfigured": "WebDAV not configured"
+    },
+    "colorTheme": {
+      "label": "Color theme",
+      "hint": "Classic shadcn-style palettes. Works with light/dark mode.",
+      "names": {
+        "default": "Default green",
+        "zinc": "Zinc",
+        "slate": "Slate",
+        "stone": "Stone",
+        "neutral": "Neutral",
+        "gray": "Gray",
+        "blue": "Blue",
+        "green": "Green",
+        "orange": "Orange",
+        "rose": "Rose",
+        "violet": "Violet"
+      }
+    },
+    "quickLinks": {
+      "title": "Shortcuts",
+      "hint": "Channels and pricing live under More in the main nav — also available here.",
+      "siteChannel": "Site channels",
+      "siteChannelDesc": "Projected channels · source keys · model routes",
+      "manualChannel": "Manual channels",
+      "manualChannelDesc": "Custom Base URL + keys",
+      "pricing": "Model pricing",
+      "pricingDesc": "Price table and multipliers",
+      "connect": "Connect sites",
+      "connectDesc": "Account sync and check-in"
+    },
+    "accessBundle": {
+      "title": "Access bundle",
+      "hint": "Copy Base URL, access key, and available models for clients.",
+      "baseUrl": "Service URL",
+      "useCurrent": "This page",
+      "apiKey": "Access key",
+      "pickKey": "Select key",
+      "noKey": "No enabled access key yet. Create one above first.",
+      "noModels": "No public groups (models) yet.",
+      "curl": "Sample curl",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "fields": {
+        "base": "Base URL",
+        "key": "Access key",
+        "models": "Models (public groups)"
+      }
     }
   },
   "group": {
@@ -656,7 +717,7 @@
     "empty": "No groups yet, click the button above to create one",
     "autoGroup": {
       "title": "Auto Group Configuration",
-      "description": "Add channels or site groups to the list, and the system will automatically add models to matching model groups by group name or regex.",
+      "description": "Configure auto-group rules per channel; models are attached to matching public groups by name or regex.",
       "loadFailed": "Failed to load auto group configuration: {message}",
       "searchPlaceholder": "Search...",
       "runAll": "Run all enabled now",
@@ -667,6 +728,14 @@
       "global": {
         "title": "Global default mode",
         "description": "When enabled, all site-projected channels use the selected match mode. Per-channel settings below are kept and take effect after the global mode is disabled."
+      },
+      "createMissing": {
+        "title": "Create missing groups on exact match",
+        "description": "Creates RoundRobin public groups for unmatched exact models. Prefer the public-name dictionary so dirty upstream ids do not become fragment groups."
+      },
+      "normalize": {
+        "title": "Normalize model names on exact match",
+        "description": "Strip provider prefixes and date suffixes, normalize 3-5→3.5, then map via the public-name dictionary."
       },
       "sections": {
         "channels": "Channels"
@@ -707,6 +776,13 @@
         "runSuccess": "Auto grouping has run",
         "runFailed": "Failed to run auto grouping"
       }
+    },
+    "emptyState": {
+      "title": "No public routes yet",
+      "description": "A public group name is the client model name. Create one manually or auto-group from projected channels.",
+      "create": "Create group",
+      "autoGroup": "Auto-group",
+      "goConnect": "Go connect sites"
     }
   },
   "model": {
@@ -768,6 +844,7 @@
       "failed": "Failed",
       "skipped": "Skipped",
       "circuitBreak": "Circuit Break",
+      "routeReason": "Route",
       "disableModel": "Disable Model",
       "disabling": "Disabling",
       "disabled": "Disabled",
@@ -791,7 +868,12 @@
       "transportInput": "Transport Input",
       "billInput": "Billed Input",
       "cacheRead": "Cache Read",
-      "cacheWrite": "Cache Write"
+      "cacheWrite": "Cache Write",
+      "canceled": "Canceled",
+      "timeout": "Timeout",
+      "copyReport": "Copy report",
+      "reportCopied": "Report copied",
+      "reportCopyFailed": "Copy failed"
     },
     "filters": {
       "keywordPlaceholder": "Search model, API key or content",
@@ -809,6 +891,11 @@
       "next": "Next",
       "page": "Page {page}",
       "pagesRange": "Pages {from}–{to}"
+    },
+    "statusFilter": {
+      "all": "All",
+      "error": "Errors",
+      "success": "Success"
     }
   },
   "channel": {
@@ -959,7 +1046,7 @@
   },
   "siteSync": {
     "errors": {
-      "missingGroupKey": "Group \"{groupKey}\" has no available key. Create a key for this group on the site and sync again."
+      "missingGroupKey": "Upstream group \"{groupKey}\" has no available source key. Create or paste a source key for this group, then sync again."
     }
   },
   "errors": {
@@ -992,8 +1079,8 @@
       "model_not_found": "The site model was not found.",
       "route_update_failed": "Failed to update model routes. Try again later.",
       "model_disable_failed": "Failed to update model disabled state. Try again later.",
-      "key_create_failed": "Failed to create the site key. Check the site status or try again later.",
-      "source_key_update_failed": "Failed to update source keys. Check your input and try again.",
+      "key_create_failed": "Failed to create the source key. Check the site management credential or try again later.",
+      "source_key_update_failed": "Failed to update the source key. Check your input and try again.",
       "project_failed": "Failed to sync site channel projection. Try again later."
     },
     "channel": {
@@ -1018,20 +1105,20 @@
     },
     "relay": {
       "model_not_supported": "This API key does not support the requested model.",
-      "model_not_found": "The model was not found or has no configured group.",
+      "model_not_found": "The model was not found or has no configured public group.",
       "no_available_channel": "No available channel.",
       "channel_disabled": "The channel is disabled.",
-      "no_available_key": "No available key.",
+      "no_available_key": "No available source key.",
       "upstream_failed": "The upstream request failed.",
       "timeout": "The request timed out.",
       "circuit_breaker_tripped": "The channel circuit breaker is tripped. Try again later."
     },
     "site": {
       "sync": {
-        "missing_group_key": "Group \"{groupKey}\" has no available key. Create a key for this group on the site and sync again.",
-        "group_models_unresolved": "Could not resolve models for group \"{groupKey}\". Check the group model configuration or key permissions.",
-        "no_group_result": "Site account sync failed: no group sync result is available.",
-        "all_groups_unresolved": "Site account sync failed: all groups could not confirm models. Historical models were kept.",
+        "missing_group_key": "Upstream group \"{groupKey}\" has no available source key. Create or paste a source key for this group, then sync again.",
+        "group_models_unresolved": "Could not resolve models for upstream group \"{groupKey}\". Check the model configuration or source key permissions.",
+        "no_group_result": "Site account sync failed: no upstream group sync result is available.",
+        "all_groups_unresolved": "Site account sync failed: none of the upstream groups could confirm models. Historical models were kept.",
         "unsupported_platform": "Unsupported site platform: {platform}.",
         "snapshot_nil": "The sync result is empty. Try again later."
       },
@@ -1057,8 +1144,8 @@
         "persist_failed": "Failed to save imported data. Try again later."
       },
       "sub2api": {
-        "api_key_required": "Sub2API sync requires an API key. Create a key on the site and sync again.",
-        "model_api_key_required": "Sub2API model discovery requires an API key. Create a key on the site and sync again.",
+        "api_key_required": "Sub2API sync requires a source key. Create or paste a source key on the site, then sync again.",
+        "model_api_key_required": "Sub2API model discovery requires a source key. Create or paste a source key on the site, then sync again.",
         "envelope_failed": "Sub2API returned an error. Check the access token, permissions, or site status.",
         "missing_data": "Sub2API response is missing required data. Check site compatibility or try again later."
       }

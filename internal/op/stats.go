@@ -334,6 +334,17 @@ func StatsChannelUpdate(channelID int, metrics model.StatsMetrics) error {
 	statsChannelCacheNeedUpdateLock.Lock()
 	statsChannelCacheNeedUpdate[channelID] = struct{}{}
 	statsChannelCacheNeedUpdateLock.Unlock()
+	// Sliding-window samples for runtime health (ignore pure cost/token deltas).
+	if metrics.RequestSuccess > 0 {
+		for i := int64(0); i < metrics.RequestSuccess; i++ {
+			StatsChannelRecentRecord(channelID, true)
+		}
+	}
+	if metrics.RequestFailed > 0 {
+		for i := int64(0); i < metrics.RequestFailed; i++ {
+			StatsChannelRecentRecord(channelID, false)
+		}
+	}
 	return nil
 }
 

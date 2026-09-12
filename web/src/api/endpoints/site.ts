@@ -180,6 +180,59 @@ export type SiteSyncResult = {
   message: string;
 };
 
+export type SiteSyncRuntimeStatus = {
+  running: boolean;
+  job_id?: number;
+  trigger: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms: number;
+  total: number;
+  attempted: number;
+  success: number;
+  partial: number;
+  failed: number;
+  skipped: number;
+  warnings: number;
+  canceled: boolean;
+  cancel_reason?: string;
+  active_account_ids?: number[];
+};
+
+export type SiteSyncJobStatus =
+  | "queued"
+  | "running"
+  | "success"
+  | "partial"
+  | "failed"
+  | "canceled"
+  | "skipped";
+
+export type SiteSyncJob = {
+  id: number;
+  phase: string;
+  trigger: string;
+  status: SiteSyncJobStatus;
+  total: number;
+  attempted: number;
+  success: number;
+  partial: number;
+  failed: number;
+  skipped: number;
+  warnings: number;
+  canceled: boolean;
+  blocked_by_job_id?: number;
+  cancel_reason?: string;
+  error_message?: string;
+  started_at?: string | null;
+  heartbeat_at?: string | null;
+  lease_expires_at?: string | null;
+  finished_at?: string | null;
+  duration_ms: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SiteCheckinResult = {
   account_id: number;
   site_id: number;
@@ -292,6 +345,11 @@ function invalidateSiteQueries(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ["channels", "list"] });
   queryClient.invalidateQueries({ queryKey: ["models", "channel"] });
   queryClient.invalidateQueries({ queryKey: ["proxy-pool"] });
+  queryClient.invalidateQueries({ queryKey: ["groups", "list"] });
+  // Sync/projection may rebuild channels; refresh runtime health after server reset.
+  queryClient.invalidateQueries({ queryKey: ["runtime"] });
+  queryClient.invalidateQueries({ queryKey: ["group-health"] });
+  queryClient.invalidateQueries({ queryKey: ["sites", "sync-jobs"] });
 }
 
 function getAuthHeader() {
@@ -470,8 +528,13 @@ export function useCheckinSiteAccount() {
 export function useSyncAllSites() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => apiClient.post<null>("/api/v1/site/sync-all", {}),
-    onSuccess: () => invalidateSiteQueries(queryClient),
+    mutationFn: async () =>
+      apiClient.post<SiteSyncJob>("/api/v1/site/sync-all", {}),
+    onSuccess: () => {
+      invalidateSiteQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["sites", "sync-status"] });
+      queryClient.invalidateQueries({ queryKey: ["sites", "sync-jobs"] });
+    },
     onError: (error) => logger.error("站点批量同步失败:", error),
   });
 }
@@ -491,6 +554,24 @@ export function useSiteLastSyncTime() {
     queryKey: ["sites", "last-sync-time"],
     queryFn: async () => apiClient.get<string>("/api/v1/site/last-sync-time"),
     refetchInterval: 30000,
+  });
+}
+
+export function useSiteSyncRuntimeStatus() {
+  return useQuery({
+    queryKey: ["sites", "sync-status"],
+    queryFn: async () =>
+      apiClient.get<SiteSyncRuntimeStatus>("/api/v1/site/sync-status"),
+    refetchInterval: 3000,
+  });
+}
+
+export function useSiteSyncJobs(limit = 5) {
+  return useQuery({
+    queryKey: ["sites", "sync-jobs", limit],
+    queryFn: async () =>
+      apiClient.get<SiteSyncJob[]>(`/api/v1/site/sync-jobs?limit=${limit}`),
+    refetchInterval: 5000,
   });
 }
 

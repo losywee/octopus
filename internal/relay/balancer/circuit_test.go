@@ -86,3 +86,24 @@ func TestHalfOpenDoesNotRemainTrippedForeverWithoutResult(t *testing.T) {
 		t.Fatalf("expected half-open timestamp to be cleared, got %v", entry.HalfOpenSince)
 	}
 }
+
+
+func TestResetCircuitBreakerExactChannelID(t *testing.T) {
+	Reset()
+	// Ensure channel 1 does not wipe channel 10 via prefix matching.
+	globalBreaker.Store(circuitKey(1, 1, "m"), &circuitEntry{State: StateOpen, LastFailureTime: time.Now(), TripCount: 1})
+	globalBreaker.Store(circuitKey(10, 1, "m"), &circuitEntry{State: StateOpen, LastFailureTime: time.Now(), TripCount: 1})
+	globalBreaker.Store(circuitKey(11, 1, "m"), &circuitEntry{State: StateOpen, LastFailureTime: time.Now(), TripCount: 1})
+
+	ResetStateByChannel(1)
+
+	if tripped, _ := IsTripped(1, 1, "m"); tripped {
+		t.Fatal("channel 1 should be cleared")
+	}
+	if tripped, _ := IsTripped(10, 1, "m"); !tripped {
+		t.Fatal("channel 10 must remain tripped")
+	}
+	if tripped, _ := IsTripped(11, 1, "m"); !tripped {
+		t.Fatal("channel 11 must remain tripped")
+	}
+}

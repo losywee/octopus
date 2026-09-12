@@ -44,14 +44,18 @@
     "supportedModels": "支援的模型"
   },
   "navbar": {
-    "home": "主頁",
-    "site": "站點",
+    "home": "概覽",
+    "site": "接入",
     "channel": "供應源",
-    "group": "分組",
+    "group": "路由",
     "key": "金鑰",
     "model": "價格",
-    "log": "日誌",
-    "setting": "設定"
+    "log": "流量",
+    "setting": "設定",
+    "connect": "接入",
+    "route": "路由",
+    "traffic": "流量",
+    "more": "更多"
   },
   "toolbar": {
     "popover": {
@@ -217,6 +221,15 @@
     "groupHealth": {
       "label": "分組健康檢查",
       "description": "啟用後顯示首頁分組健康摘要、分組卡片健康狀態，並允許手動執行健康檢查。"
+    },
+    "requestTimeout": {
+      "title": "非串流請求逾時",
+      "hint": "僅作用於非串流上游請求總時長。0 表示不限制，仍跟隨用戶端中斷。串流請用分組「首字逾時」。",
+      "seconds": {
+        "label": "逾時秒數",
+        "placeholder": "0",
+        "description": "單位秒。逾時後目前嘗試失敗並切換/返回錯誤，不會無限掛起。"
+      }
     },
     "circuitBreaker": {
       "title": "熔斷器配置",
@@ -523,6 +536,54 @@
       "modifiedAt": "修改時間",
       "refresh": "重新整理",
       "notConfigured": "WebDAV 未設定"
+    },
+    "colorTheme": {
+      "label": "色彩主題",
+      "hint": "經典 shadcn 風格色板，可與淺色/深色模式疊加使用。",
+      "names": {
+        "default": "預設綠",
+        "zinc": "Zinc",
+        "slate": "Slate",
+        "stone": "Stone",
+        "neutral": "Neutral",
+        "gray": "Gray",
+        "blue": "Blue",
+        "green": "Green",
+        "orange": "Orange",
+        "rose": "Rose",
+        "violet": "Violet"
+      }
+    },
+    "quickLinks": {
+      "title": "快捷入口",
+      "hint": "供應源與價格在主導航「更多」中，也可從這裡進入。",
+      "siteChannel": "站點供應源",
+      "siteChannelDesc": "投影供應源 · 源密鑰 · 模型路由",
+      "manualChannel": "一般供應源",
+      "manualChannelDesc": "手動 Base URL + 密鑰",
+      "pricing": "模型價格",
+      "pricingDesc": "價格表與倍率",
+      "connect": "接入站點",
+      "connectDesc": "帳號同步與簽到"
+    },
+    "accessBundle": {
+      "title": "接入資訊",
+      "hint": "複製 Base URL、存取金鑰與可用 model，給用戶端直接使用。",
+      "baseUrl": "服務位址",
+      "useCurrent": "目前頁面",
+      "apiKey": "存取金鑰",
+      "pickKey": "選擇金鑰",
+      "noKey": "還沒有啟用中的存取金鑰，請先在上方建立。",
+      "noModels": "還沒有對外分組（model）。",
+      "curl": "範例 curl",
+      "copy": "複製",
+      "copied": "已複製",
+      "copyFailed": "複製失敗",
+      "fields": {
+        "base": "Base URL",
+        "key": "存取金鑰",
+        "models": "可用 model（對外分組）"
+      }
     }
   },
   "group": {
@@ -656,7 +717,7 @@
     "empty": "暫無分組，點擊左上角按鈕建立",
     "autoGroup": {
       "title": "自動分組配置",
-      "description": "將供應源或站點分組加入列表後，系統會按模型組名稱或正規自動把模型加入匹配的模型組。",
+      "description": "為供應源配置自動入組規則後，系統會按對外分組名稱或正則，把模型掛到匹配的對外分組。",
       "loadFailed": "載入自動分組配置失敗：{message}",
       "searchPlaceholder": "搜尋...",
       "runAll": "立即執行全部已啟用",
@@ -667,6 +728,14 @@
       "global": {
         "title": "全域預設模式",
         "description": "啟用後，所有站點投影供應源會統一使用所選匹配方式；下方單獨供應源設定會保留，並在全域關閉後生效。"
+      },
+      "createMissing": {
+        "title": "精確匹配時自動建立缺失分組",
+        "description": "開啟後，精確匹配會為尚無同名對外分組的模型自動建組並掛載。建議配合「規範/別名」：優先用規範名建組，避免上游髒名變成一堆碎片分組。"
+      },
+      "normalize": {
+        "title": "精確匹配時正規化模型名",
+        "description": "忽略供應商前綴與日期後綴，並將 3-5 規範為 3.5；再配合規範/別名字典歸入統一對外名。"
       },
       "sections": {
         "channels": "供應源列表"
@@ -707,6 +776,13 @@
         "runSuccess": "已執行自動分組",
         "runFailed": "執行自動分組失敗"
       }
+    },
+    "emptyState": {
+      "title": "還沒有對外分組",
+      "description": "對外分組名 = 用戶端請求的 model。可手動建立，或開啟自動分組從投影供應源生成。",
+      "create": "建立分組",
+      "autoGroup": "自動分組",
+      "goConnect": "去接入站點"
     }
   },
   "model": {
@@ -768,6 +844,7 @@
       "failed": "失敗",
       "skipped": "跳過",
       "circuitBreak": "熔斷",
+      "routeReason": "選路",
       "disableModel": "停用模型",
       "disabling": "停用中",
       "disabled": "已停用",
@@ -791,7 +868,12 @@
       "transportInput": "傳輸輸入",
       "billInput": "計費輸入",
       "cacheRead": "快取讀取",
-      "cacheWrite": "快取寫入"
+      "cacheWrite": "快取寫入",
+      "canceled": "已取消",
+      "timeout": "逾時",
+      "copyReport": "複製排障報告",
+      "reportCopied": "排障報告已複製",
+      "reportCopyFailed": "複製失敗"
     },
     "filters": {
       "keywordPlaceholder": "搜尋模型、API Key 或內容",
@@ -809,6 +891,11 @@
       "next": "下一頁",
       "page": "第 {page} 頁",
       "pagesRange": "第 {from} ~ {to} 頁"
+    },
+    "statusFilter": {
+      "all": "全部",
+      "error": "僅失敗",
+      "success": "僅成功"
     }
   },
   "channel": {
@@ -959,7 +1046,7 @@
   },
   "siteSync": {
     "errors": {
-      "missingGroupKey": "分組“{groupKey}”沒有可用的 Key。請先到站點建立這個分組的 Key，再重新同步。"
+      "missingGroupKey": "上游分組“{groupKey}”沒有可用的源密鑰。請先建立或貼上該分組的源密鑰，再重新同步。"
     }
   },
   "errors": {
@@ -992,8 +1079,8 @@
       "model_not_found": "站點模型不存在。",
       "route_update_failed": "更新模型路由失敗，請稍後重試。",
       "model_disable_failed": "更新模型停用狀態失敗，請稍後重試。",
-      "key_create_failed": "建立站點 Key 失敗，請檢查站點狀態或稍後重試。",
-      "source_key_update_failed": "更新來源 Key 失敗，請檢查輸入後重試。",
+      "key_create_failed": "建立源密鑰失敗，請檢查站點管理憑證或稍後重試。",
+      "source_key_update_failed": "更新源密鑰失敗，請檢查輸入後重試。",
       "project_failed": "同步站點渠道投影失敗，請稍後重試。"
     },
     "channel": {
@@ -1018,20 +1105,20 @@
     },
     "relay": {
       "model_not_supported": "目前 API Key 不支援該模型。",
-      "model_not_found": "模型不存在或未配置可用分組。",
+      "model_not_found": "模型不存在或未配置可用的對外分組。",
       "no_available_channel": "沒有可用通道。",
       "channel_disabled": "通道已停用。",
-      "no_available_key": "沒有可用 Key。",
+      "no_available_key": "沒有可用源密鑰。",
       "upstream_failed": "上游請求失敗。",
       "timeout": "請求逾時。",
       "circuit_breaker_tripped": "通道熔斷中，請稍後重試。"
     },
     "site": {
       "sync": {
-        "missing_group_key": "分組「{groupKey}」沒有可用的 Key。請先到站點建立這個分組的 Key，再重新同步。",
-        "group_models_unresolved": "無法確認分組「{groupKey}」的模型，請檢查分組模型配置或 Key 權限。",
-        "no_group_result": "站點帳號同步失敗：沒有可用的分組同步結果。",
-        "all_groups_unresolved": "站點帳號同步失敗：所有分組都未能確認模型，已保留歷史模型。",
+        "missing_group_key": "上游分組「{groupKey}」沒有可用的源密鑰。請先建立或貼上該分組的源密鑰，再重新同步。",
+        "group_models_unresolved": "無法確認上游分組「{groupKey}」的模型，請檢查模型配置或源密鑰權限。",
+        "no_group_result": "站點帳號同步失敗：沒有可用的上游分組同步結果。",
+        "all_groups_unresolved": "站點帳號同步失敗：所有上游分組都未能確認模型，已保留歷史模型。",
         "unsupported_platform": "不支援的站點平台：{platform}。",
         "snapshot_nil": "同步結果為空，請稍後重試。"
       },
@@ -1057,8 +1144,8 @@
         "persist_failed": "儲存匯入資料失敗，請稍後重試。"
       },
       "sub2api": {
-        "api_key_required": "Sub2API 同步需要 API Key。請先在站點建立一個 Key 後再重新同步。",
-        "model_api_key_required": "Sub2API 模型發現需要 API Key。請先在站點建立一個 Key 後再重新同步。",
+        "api_key_required": "Sub2API 同步需要源密鑰。請先在站點建立或貼上源密鑰後再重新同步。",
+        "model_api_key_required": "Sub2API 模型發現需要源密鑰。請先在站點建立或貼上源密鑰後再重新同步。",
         "envelope_failed": "Sub2API 返回錯誤，請檢查 Access Token、權限或站點狀態。",
         "missing_data": "Sub2API 回應缺少必要資料，請檢查站點相容性或稍後重試。"
       }

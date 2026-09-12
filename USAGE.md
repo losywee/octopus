@@ -103,9 +103,9 @@ If your provider isn't a relay site but gave you a Base URL + Key directly (e.g.
 
 ### 4.1 Deployment (Choose One)
 
-**Docker run:**
+**Docker run (Docker Hub recommended):**
 ```bash
-docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 ghcr.io/xuanli27/octopus
+docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 qianduzzz/octopus:latest
 ```
 
 **docker compose:**
@@ -114,7 +114,9 @@ wget https://raw.githubusercontent.com/xuanli27/octopus/refs/heads/dev/docker-co
 docker compose up -d
 ```
 
-> ⚠️ **You must use the `ghcr.io/xuanli27/octopus` image** (the version with Site functionality). If you use `bestrui/octopus` or other upstream images, you won't see the "Sites" page. For Release binaries and building from source, see [README.md](README.md).
+> ⚠️ **Use this fork's image** (includes Site features): `qianduzzz/octopus` (Docker Hub) or `ghcr.io/xuanli27/octopus` (GHCR).  
+> Upstream images such as `bestrui/octopus` do not include the Sites UI. For binaries / build-from-source, see [README.md](README.md).  
+> Alpine: `qianduzzz/octopus:latest-alpine`; pin a version with e.g. `qianduzzz/octopus:v0.9.1`.
 
 ### 4.2 First Login
 

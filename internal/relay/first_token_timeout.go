@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	dbmodel "github.com/xuanli27/octopus/internal/model"
+	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/utils/log"
 )
 
@@ -46,6 +48,32 @@ func (b *firstTokenBudget) close() {
 			b.cancel(context.Canceled)
 		}
 	})
+}
+
+// attachRequestTimeout applies global non-stream request timeout (setting relay_request_timeout).
+// Stream requests keep first-token budget instead of a hard total timeout.
+func (ra *relayAttempt) attachRequestTimeout(req *http.Request) *http.Request {
+	if req == nil || ra == nil {
+		return req
+	}
+	// Prefer first-token budget for streams.
+	if ra.internalRequest != nil && ra.internalRequest.Stream != nil && *ra.internalRequest.Stream {
+		return req
+	}
+	seconds, err := op.SettingGetInt(dbmodel.SettingKeyRelayRequestTimeout)
+	if err != nil || seconds <= 0 {
+		return req
+	}
+	ctx, cancel := context.WithTimeoutCause(req.Context(), time.Duration(seconds)*time.Second, errRequestTimeout)
+	// Reuse firstTokenBudget close path; TimeoutCause cancel ignores the cause arg.
+	budget := &firstTokenBudget{
+		ctx: ctx,
+		cancel: func(cause error) {
+			cancel()
+		},
+	}
+	ra.firstTokenBudget = budget
+	return req.WithContext(ctx)
 }
 
 func (ra *relayAttempt) attachFirstTokenBudget(req *http.Request) *http.Request {
@@ -107,6 +135,15 @@ func (ra *relayAttempt) firstTokenTimeoutIfNeeded(ctx context.Context, err error
 			log.Warnf("first token timeout (%ds), switching channel", ra.firstTokenTimeOutSec)
 		}
 		return ra.firstTokenTimeoutError()
+	}
+	if isRequestTimeout(ctx, err) || isRequestTimeout(ctx, contextError(ctx)) ||
+		isRequestTimeout(budgetCtx, err) || isRequestTimeout(budgetCtx, contextError(budgetCtx)) {
+		seconds, _ := op.SettingGetInt(dbmodel.SettingKeyRelayRequestTimeout)
+		if seconds > 0 {
+			log.Warnf("non-stream request timeout (%ds), failing attempt", seconds)
+			return fmt.Errorf("%w (%ds)", errRequestTimeout, seconds)
+		}
+		return errRequestTimeout
 	}
 	return nil
 }

@@ -50,26 +50,35 @@ const (
 	SiteBatchReasonContextDeadlineExceeded SiteBatchReason = "context_deadline_exceeded"
 	SiteBatchReasonDatabaseError           SiteBatchReason = "database_error"
 	SiteBatchReasonInternalError           SiteBatchReason = "internal_error"
+	SiteBatchReasonAlreadyRunning          SiteBatchReason = "already_running"
+	SiteBatchReasonLeaseLost               SiteBatchReason = "lease_lost"
 	SiteBatchReasonUnknown                 SiteBatchReason = "unknown"
 )
 
 type SiteBatchOptions struct {
 	Trigger SiteBatchTrigger
+	// JobID is optional. HTTP callers create a durable queued job before
+	// launching the background worker; scheduled/import callers leave it zero
+	// and the sync package creates one when the batch starts.
+	JobID int
 }
 
 type SiteBatchSummary struct {
-	Phase        SiteBatchPhase
-	Trigger      SiteBatchTrigger
-	Total        int
-	Attempted    int
-	Success      int
-	Partial      int
-	Failed       int
-	Skipped      int
-	Warnings     int
-	Canceled     bool
-	CancelReason SiteBatchReason
-	Duration     time.Duration
+	Phase          SiteBatchPhase
+	Trigger        SiteBatchTrigger
+	JobID          int
+	BlockedByJobID int
+	Total          int
+	Attempted      int
+	Success        int
+	Partial        int
+	Failed         int
+	Skipped        int
+	Warnings       int
+	Canceled       bool
+	CancelReason   SiteBatchReason
+	Duration       time.Duration
+	ErrorMessage   string
 
 	failureGroups map[siteBatchGroupKey]*SiteBatchOutcomeGroup
 	warningGroups map[siteBatchGroupKey]*SiteBatchOutcomeGroup
@@ -216,7 +225,7 @@ func (s *SiteBatchSummary) emitLog() {
 	failureGroups := sortedSiteBatchGroups(s.failureGroups)
 	warningGroups := sortedSiteBatchGroups(s.warningGroups)
 	skipGroups := sortedSiteBatchGroups(s.skipGroups)
-	if s.Failed == 0 && s.Warnings == 0 && !hasExceptionalSkips(skipGroups) && !s.Canceled {
+	if s.Failed == 0 && s.Warnings == 0 && !hasExceptionalSkips(skipGroups) && !s.Canceled && s.ErrorMessage == "" && s.BlockedByJobID == 0 {
 		log.Debugw(siteBatchEventName(s, false), s.logFields(failureGroups, warningGroups, skipGroups)...)
 		return
 	}
@@ -228,6 +237,7 @@ func (s *SiteBatchSummary) emitLog() {
 
 func (s *SiteBatchSummary) logFields(failureGroups, warningGroups, skipGroups []SiteBatchOutcomeGroup) []interface{} {
 	fields := []interface{}{
+		"job_id", s.JobID,
 		"trigger", string(s.Trigger),
 		"total", s.Total,
 		"attempted", s.Attempted,
@@ -247,6 +257,12 @@ func (s *SiteBatchSummary) logFields(failureGroups, warningGroups, skipGroups []
 	if s.Canceled {
 		fields = append(fields, "canceled", true, "cancel_reason", string(s.CancelReason))
 	}
+	if s.ErrorMessage != "" {
+		fields = append(fields, "error_message", sanitizeSiteStatusText(s.ErrorMessage))
+	}
+	if s.BlockedByJobID > 0 {
+		fields = append(fields, "blocked_by_job_id", s.BlockedByJobID)
+	}
 	return fields
 }
 
@@ -254,7 +270,7 @@ func siteBatchEventName(s *SiteBatchSummary, warningOnly bool) string {
 	if warningOnly {
 		return "sitesync." + string(s.Phase) + ".warning_summary"
 	}
-	if s.Failed == 0 && s.Warnings == 0 && !s.Canceled {
+	if s.Failed == 0 && s.Warnings == 0 && !s.Canceled && s.ErrorMessage == "" && s.BlockedByJobID == 0 {
 		return "sitesync." + string(s.Phase) + ".done"
 	}
 	return "sitesync." + string(s.Phase) + ".summary"
@@ -355,7 +371,7 @@ func formatSiteBatchSamples(samples []SiteBatchFailureSample) string {
 func hasExceptionalSkips(groups []SiteBatchOutcomeGroup) bool {
 	for _, group := range groups {
 		switch group.Reason {
-		case SiteBatchReasonCloudflareProtection, SiteBatchReasonBatchCanceled:
+		case SiteBatchReasonCloudflareProtection, SiteBatchReasonBatchCanceled, SiteBatchReasonAlreadyRunning, SiteBatchReasonLeaseLost:
 			return true
 		}
 	}

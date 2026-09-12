@@ -78,7 +78,7 @@ func buildSyncSnapshotMessage(results []siteGroupSyncResult) string {
 		parts = append(parts, fmt.Sprintf("保留 %d 个分组的历史投影", counts[siteGroupSyncStatusUnresolved]+counts[siteGroupSyncStatusFailed]))
 	}
 	if counts[siteGroupSyncStatusMissingKey] > 0 {
-		parts = append(parts, fmt.Sprintf("暂停 %d 个缺少可用 Key 的分组投影", counts[siteGroupSyncStatusMissingKey]))
+		parts = append(parts, fmt.Sprintf("暂停 %d 个缺少可用源密钥的上游分组投影", counts[siteGroupSyncStatusMissingKey]))
 	}
 
 	message := strings.Join(parts, "，")

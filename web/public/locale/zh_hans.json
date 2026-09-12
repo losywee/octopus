@@ -44,14 +44,18 @@
     "supportedModels": "支持的模型"
   },
   "navbar": {
-    "home": "主页",
-    "site": "站点",
+    "home": "概览",
+    "site": "接入",
     "channel": "渠道",
-    "group": "分组",
+    "group": "路由",
     "key": "密钥",
     "model": "价格",
-    "log": "日志",
-    "setting": "设置"
+    "log": "流量",
+    "setting": "设置",
+    "connect": "接入",
+    "route": "路由",
+    "traffic": "流量",
+    "more": "更多"
   },
   "toolbar": {
     "popover": {
@@ -217,6 +221,15 @@
     "groupHealth": {
       "label": "分组健康检查",
       "description": "启用后显示首页分组健康摘要、分组卡片健康状态，并允许手动运行健康检查。"
+    },
+    "requestTimeout": {
+      "title": "非流式请求超时",
+      "hint": "仅作用于非流式上游请求总时长。0 表示不限制，仍跟随客户端断开。流式请用分组「首字超时」。",
+      "seconds": {
+        "label": "超时秒数",
+        "placeholder": "0",
+        "description": "单位秒。超时后当前尝试失败并切换/返回错误，不会无限挂起。"
+      }
     },
     "circuitBreaker": {
       "title": "熔断器配置",
@@ -523,6 +536,54 @@
       "modifiedAt": "修改时间",
       "refresh": "刷新",
       "notConfigured": "WebDAV 未配置"
+    },
+    "colorTheme": {
+      "label": "色彩主题",
+      "hint": "经典 shadcn 风格色板，可与浅色/深色模式叠加使用。",
+      "names": {
+        "default": "默认绿",
+        "zinc": "Zinc",
+        "slate": "Slate",
+        "stone": "Stone",
+        "neutral": "Neutral",
+        "gray": "Gray",
+        "blue": "Blue",
+        "green": "Green",
+        "orange": "Orange",
+        "rose": "Rose",
+        "violet": "Violet"
+      }
+    },
+    "quickLinks": {
+      "title": "快捷入口",
+      "hint": "渠道与价格在主导航「更多」中，也可从这里进入。",
+      "siteChannel": "站点渠道",
+      "siteChannelDesc": "投影渠道 · 源密钥 · 模型路由",
+      "manualChannel": "普通渠道",
+      "manualChannelDesc": "手动 Base URL + 密钥",
+      "pricing": "模型价格",
+      "pricingDesc": "价格表与倍率",
+      "connect": "接入站点",
+      "connectDesc": "账号同步与签到"
+    },
+    "accessBundle": {
+      "title": "接入信息",
+      "hint": "复制 Base URL、访问密钥与可用 model，给客户端直接用。",
+      "baseUrl": "服务地址",
+      "useCurrent": "当前页面",
+      "apiKey": "访问密钥",
+      "pickKey": "选择密钥",
+      "noKey": "还没有启用中的访问密钥，请先在上方创建。",
+      "noModels": "还没有对外分组（model）。",
+      "curl": "示例 curl",
+      "copy": "复制",
+      "copied": "已复制",
+      "copyFailed": "复制失败",
+      "fields": {
+        "base": "Base URL",
+        "key": "访问密钥",
+        "models": "可用 model（对外分组）"
+      }
     }
   },
   "group": {
@@ -656,7 +717,7 @@
     "empty": "暂无分组，点击左上角按钮创建",
     "autoGroup": {
       "title": "自动分组配置",
-      "description": "将渠道或站点分组加入列表后，系统会按模型组名称或正则自动把模型加入匹配的模型组。",
+      "description": "为渠道配置自动入组规则后，系统会按对外分组名称或正则，把渠道模型挂到匹配的对外分组。",
       "loadFailed": "加载自动分组配置失败：{message}",
       "searchPlaceholder": "搜索...",
       "runAll": "立即执行全部已启用",
@@ -667,6 +728,14 @@
       "global": {
         "title": "全局默认模式",
         "description": "开启后，所有站点投影渠道会统一使用所选匹配方式；下方单独渠道设置会保留，并在全局关闭后生效。"
+      },
+      "createMissing": {
+        "title": "精确匹配时自动创建缺失分组",
+        "description": "开启后，精确匹配会为尚无同名对外分组的模型自动建组并挂载。建议配合「规范/别名」：优先用规范名建组，避免上游脏名变成一堆碎片分组。"
+      },
+      "normalize": {
+        "title": "精确匹配时归一化模型名",
+        "description": "忽略供应商前缀与日期后缀，并将 3-5 规范为 3.5；再配合规范/别名字典归入统一对外名。"
       },
       "sections": {
         "channels": "渠道列表"
@@ -707,6 +776,13 @@
         "runSuccess": "已执行自动分组",
         "runFailed": "执行自动分组失败"
       }
+    },
+    "emptyState": {
+      "title": "还没有对外分组",
+      "description": "对外分组名 = 客户端请求的 model。可手动创建，或开启自动分组从投影渠道生成。",
+      "create": "创建分组",
+      "autoGroup": "自动分组",
+      "goConnect": "去接入站点"
     }
   },
   "model": {
@@ -768,6 +844,7 @@
       "failed": "失败",
       "skipped": "跳过",
       "circuitBreak": "熔断",
+      "routeReason": "选路",
       "disableModel": "禁用模型",
       "disabling": "禁用中",
       "disabled": "已禁用",
@@ -791,7 +868,12 @@
       "transportInput": "传输输入",
       "billInput": "计费输入",
       "cacheRead": "缓存读取",
-      "cacheWrite": "缓存写入"
+      "cacheWrite": "缓存写入",
+      "canceled": "已取消",
+      "timeout": "超时",
+      "copyReport": "复制排障报告",
+      "reportCopied": "排障报告已复制",
+      "reportCopyFailed": "复制失败"
     },
     "filters": {
       "keywordPlaceholder": "搜索模型、API Key 或内容",
@@ -809,6 +891,11 @@
       "next": "下一页",
       "page": "第 {page} 页",
       "pagesRange": "第 {from} ~ {to} 页"
+    },
+    "statusFilter": {
+      "all": "全部",
+      "error": "仅失败",
+      "success": "仅成功"
     }
   },
   "channel": {
@@ -959,7 +1046,7 @@
   },
   "siteSync": {
     "errors": {
-      "missingGroupKey": "分组“{groupKey}”没有可用的 Key。请先到站点创建这个分组的 Key，再重新同步。"
+      "missingGroupKey": "上游分组“{groupKey}”没有可用的源密钥。请先创建或粘贴该分组的源密钥，再重新同步。"
     }
   },
   "errors": {
@@ -992,8 +1079,8 @@
       "model_not_found": "站点模型不存在。",
       "route_update_failed": "更新模型路由失败，请稍后重试。",
       "model_disable_failed": "更新模型禁用状态失败，请稍后重试。",
-      "key_create_failed": "创建站点 Key 失败，请检查站点状态或稍后重试。",
-      "source_key_update_failed": "更新源 Key 失败，请检查输入后重试。",
+      "key_create_failed": "创建源密钥失败，请检查站点管理凭证或稍后重试。",
+      "source_key_update_failed": "更新源密钥失败，请检查输入后重试。",
       "project_failed": "同步站点渠道投影失败，请稍后重试。"
     },
     "channel": {
@@ -1018,20 +1105,20 @@
     },
     "relay": {
       "model_not_supported": "当前 API Key 不支持该模型。",
-      "model_not_found": "模型不存在或未配置可用分组。",
+      "model_not_found": "模型不存在或未配置可用的对外分组。",
       "no_available_channel": "没有可用通道。",
       "channel_disabled": "通道已禁用。",
-      "no_available_key": "没有可用 Key。",
+      "no_available_key": "没有可用源密钥。",
       "upstream_failed": "上游请求失败。",
       "timeout": "请求超时。",
       "circuit_breaker_tripped": "通道熔断中，请稍后重试。"
     },
     "site": {
       "sync": {
-        "missing_group_key": "分组“{groupKey}”没有可用的 Key。请先到站点创建这个分组的 Key，再重新同步。",
-        "group_models_unresolved": "无法确认分组“{groupKey}”的模型，请检查分组模型配置或 Key 权限。",
-        "no_group_result": "站点账号同步失败：没有可用的分组同步结果。",
-        "all_groups_unresolved": "站点账号同步失败：所有分组都未能确认模型，已保留历史模型。",
+        "missing_group_key": "上游分组“{groupKey}”没有可用的源密钥。请先创建或粘贴该分组的源密钥，再重新同步。",
+        "group_models_unresolved": "无法确认上游分组“{groupKey}”的模型，请检查模型配置或源密钥权限。",
+        "no_group_result": "站点账号同步失败：没有可用的上游分组同步结果。",
+        "all_groups_unresolved": "站点账号同步失败：所有上游分组都未能确认模型，已保留历史模型。",
         "unsupported_platform": "不支持的站点平台：{platform}。",
         "snapshot_nil": "同步结果为空，请稍后重试。"
       },
@@ -1057,8 +1144,8 @@
         "persist_failed": "保存导入数据失败，请稍后重试。"
       },
       "sub2api": {
-        "api_key_required": "Sub2API 同步需要 API Key。请先在站点创建一个 Key 后再重新同步。",
-        "model_api_key_required": "Sub2API 模型发现需要 API Key。请先在站点创建一个 Key 后再重新同步。",
+        "api_key_required": "Sub2API 同步需要源密钥。请先在站点创建或粘贴源密钥后再重新同步。",
+        "model_api_key_required": "Sub2API 模型发现需要源密钥。请先在站点创建或粘贴源密钥后再重新同步。",
         "envelope_failed": "Sub2API 返回错误，请检查 Access Token、权限或站点状态。",
         "missing_data": "Sub2API 响应缺少必要数据，请检查站点兼容性或稍后重试。"
       }

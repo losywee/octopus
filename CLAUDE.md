@@ -56,6 +56,12 @@ docker compose up -d
 
 Octopus 是一个 **LLM API 聚合与负载均衡服务**。Go 后端 (Gin + GORM) 提供 API 代理和管理接口，Next.js 前端提供管理面板。
 
+**术语（写 UI/文档时必遵）**：见 `docs/TERMINOLOGY.md`。
+- **对外分组 (Group)** = 客户端 `model` 名
+- **上游分组** = 中转站 `group_key`
+- **源密钥** = 上游调用 Token（投影进渠道）
+- **访问密钥** = 客户端 `sk-octopus-*`
+
 **启动流程**: `main.go` → `cmd/start.go` → 初始化 Config → DB → Cache → HTTP Server → Background Tasks
 
 **请求流**: Gin Router → Middleware (Auth/CORS/Logger) → Handler → Op (业务逻辑) → DB/Cache

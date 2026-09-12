@@ -13,6 +13,7 @@ import { Accordion, AccordionContent, AccordionItem } from '@/components/ui/acco
 import { cn } from '@/lib/utils';
 import { getModelIcon } from '@/lib/model-icons';
 import type { GroupMode } from '@/api/endpoints/group';
+import { usePublicModelList } from '@/api/endpoints/public-model';
 import type { SelectedMember } from './ItemList';
 import { MemberList } from './ItemList';
 import { matchesGroupName, memberKey, normalizeKey, MODE_LABELS } from './utils';
@@ -271,6 +272,7 @@ export function GroupEditor({
     const { data: modelChannels = [] } = useModelChannelList();
 
     const [groupName, setGroupName] = useState(initial?.name ?? '');
+    const { data: publicModels } = usePublicModelList();
     const [matchRegex, setMatchRegex] = useState(initial?.match_regex ?? '');
     const [mode, setMode] = useState<GroupMode>((initial?.mode ?? 1) as GroupMode);
     const [firstTokenTimeOut, setFirstTokenTimeOut] = useState<number>(initial?.first_token_time_out ?? 0);
@@ -379,7 +381,17 @@ export function GroupEditor({
                                 value={groupName}
                                 onChange={(e) => setGroupName(e.target.value)}
                                 className="rounded-xl"
+                                list="public-model-name-suggestions"
+                                placeholder="建议用规范名，如 gpt-4o"
                             />
+                            <datalist id="public-model-name-suggestions">
+                                {(publicModels ?? []).map((m) => (
+                                    <option key={m.id} value={m.name} />
+                                ))}
+                            </datalist>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                建议与「规范/别名」字典一致；客户端请求 model 就是此名称。
+                            </p>
                         </Field>
                         <Field>
                             <FieldLabel htmlFor="group-match-regex">{t('form.matchRegex')}</FieldLabel>

@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/apperror"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
@@ -18,7 +20,7 @@ import (
 	"github.com/xuanli27/octopus/internal/sitesync"
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/safe"
-	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func refreshAccountRandomCheckinScheduleBestEffort(ctx context.Context, accountID int) {
@@ -38,6 +40,9 @@ func init() {
 		AddRoute(router.NewRoute("/account/checkin/:id", http.MethodPost).Handle(checkinSiteAccount)).
 		AddRoute(router.NewRoute("/sync-all", http.MethodPost).Handle(syncAllSiteAccounts)).
 		AddRoute(router.NewRoute("/checkin-all", http.MethodPost).Handle(checkinAllSiteAccounts)).
+		AddRoute(router.NewRoute("/sync-status", http.MethodGet).Handle(getSiteSyncStatus)).
+		AddRoute(router.NewRoute("/sync-jobs", http.MethodGet).Handle(listSiteSyncJobs)).
+		AddRoute(router.NewRoute("/sync-jobs/:id", http.MethodGet).Handle(getSiteSyncJob)).
 		AddRoute(router.NewRoute("/last-sync-time", http.MethodGet).Handle(getSiteLastSyncTime)).
 		AddRoute(router.NewRoute("/last-checkin-time", http.MethodGet).Handle(getSiteLastCheckinTime)).
 		AddRoute(router.NewRoute("/:id/available-models", http.MethodGet).Handle(getSiteAvailableModels))
@@ -379,10 +384,23 @@ func checkinSiteAccount(c *gin.Context) {
 }
 
 func syncAllSiteAccounts(c *gin.Context) {
+	opts := sitesync.SiteBatchOptions{Trigger: sitesync.SiteBatchTriggerManual}
+	job, err := sitesvc.CreateSiteSyncJob(c.Request.Context(), opts)
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	opts.JobID = job.ID
 	safe.Go("site-sync-all", func() {
-		sitesvc.SyncAllWithOptions(context.Background(), sitesync.SiteBatchOptions{Trigger: sitesync.SiteBatchTriggerManual})
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+		defer cancel()
+		sitesvc.SyncAllWithOptions(ctx, opts)
 	})
-	resp.Success(c, nil)
+	c.JSON(http.StatusAccepted, resp.ResponseStruct{
+		Code:    http.StatusAccepted,
+		Message: "accepted",
+		Data:    job,
+	})
 }
 
 func checkinAllSiteAccounts(c *gin.Context) {
@@ -394,6 +412,46 @@ func checkinAllSiteAccounts(c *gin.Context) {
 
 func getSiteLastSyncTime(c *gin.Context) {
 	resp.Success(c, sitesvc.LastSyncAllTime())
+}
+
+func getSiteSyncStatus(c *gin.Context) {
+	resp.Success(c, sitesvc.SiteSyncRuntimeStatus())
+}
+
+func listSiteSyncJobs(c *gin.Context) {
+	limit := 20
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			resp.InvalidParam(c)
+			return
+		}
+		limit = parsed
+	}
+	jobs, err := sitesvc.SiteSyncJobList(c.Request.Context(), limit)
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp.Success(c, jobs)
+}
+
+func getSiteSyncJob(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		resp.InvalidParam(c)
+		return
+	}
+	job, err := sitesvc.SiteSyncJobGet(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			resp.NotFound(c)
+			return
+		}
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp.Success(c, job)
 }
 
 func getSiteLastCheckinTime(c *gin.Context) {

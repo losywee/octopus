@@ -159,6 +159,20 @@ export type FetchModelRequest = {
  * 
  * channels?.forEach(channel => console.log(channel.raw.name));
  */
+
+function invalidateChannelRelated(queryClient: ReturnType<typeof useQueryClient>) {
+    queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
+    queryClient.invalidateQueries({ queryKey: ['models', 'list'] });
+    queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
+    queryClient.invalidateQueries({ queryKey: ['proxy-pool'] });
+    queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+    // Channel config changes reset circuit/sticky + recent fail window on the server.
+    queryClient.invalidateQueries({ queryKey: ['runtime'] });
+    queryClient.invalidateQueries({ queryKey: ['group-health'] });
+    queryClient.invalidateQueries({ queryKey: ['site-channel', 'list'] });
+    queryClient.invalidateQueries({ queryKey: ['public-models', 'pending'] });
+}
+
 export function useChannelList() {
     return useQuery({
         queryKey: ['channels', 'list'],
@@ -225,11 +239,7 @@ export function useCreateChannel() {
         },
         onSuccess: (data) => {
             logger.log('渠道创建成功:', data);
-            queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
-            queryClient.invalidateQueries({ queryKey: ['models', 'list'] });
-            queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
-            queryClient.invalidateQueries({ queryKey: ['proxy-pool'] });
-            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            invalidateChannelRelated(queryClient);
         },
         onError: (error) => {
             logger.error('渠道创建失败:', error);
@@ -263,10 +273,7 @@ export function useUpdateChannel() {
         },
         onSuccess: (data) => {
             logger.log('渠道更新成功:', data);
-            queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
-            queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
-            queryClient.invalidateQueries({ queryKey: ['proxy-pool'] });
-            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            invalidateChannelRelated(queryClient);
         },
         onError: (error) => {
             logger.error('渠道更新失败:', error);
@@ -291,10 +298,7 @@ export function useDeleteChannel() {
         },
         onSuccess: () => {
             logger.log('渠道删除成功');
-            queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
-            queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
-            queryClient.invalidateQueries({ queryKey: ['proxy-pool'] });
-            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            invalidateChannelRelated(queryClient);
         },
         onError: (error) => {
             logger.error('渠道删除失败:', error);
@@ -320,9 +324,7 @@ export function useEnableChannel() {
         },
         onSuccess: () => {
             logger.log('渠道状态更新成功');
-            queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
-            queryClient.invalidateQueries({ queryKey: ['models', 'channel'] });
-            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            invalidateChannelRelated(queryClient);
         },
         onError: (error) => {
             logger.error('渠道状态更新失败:', error);

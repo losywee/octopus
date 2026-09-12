@@ -27,6 +27,8 @@ export interface ChannelAttempt {
     status: AttemptStatus;
     duration: number;       // 耗时(毫秒)
     sticky?: boolean;
+    /** Why this candidate was selected/visited (mode, order, priority/weight, sticky). */
+    reason?: string;
     msg?: string;
 }
 

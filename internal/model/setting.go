@@ -27,6 +27,9 @@ const (
 	SettingKeySSEPreStreamHeartbeatDelay       SettingKey = "sse_pre_stream_heartbeat_delay"       // SSE 上游流建立前心跳首次延迟（秒），0 表示禁用
 	SettingKeyGroupHealthEnabled               SettingKey = "group_health_enabled"                 // 是否启用分组健康检查功能
 	SettingKeyProjectedChannelAutoGroupEnabled SettingKey = "projected_channel_auto_group_enabled" // 全局站点投影渠道自动分组模式（0关闭/1模糊/2精确/3正则，兼容旧 true/false）
+	SettingKeyAutoGroupCreateMissingEnabled    SettingKey = "auto_group_create_missing_enabled"    // 精确匹配时是否为缺失的模型自动创建对外分组
+	SettingKeyAutoGroupNormalizeEnabled        SettingKey = "auto_group_normalize_enabled"         // 精确匹配时是否归一化模型名（去前缀/日期后缀）
+	SettingKeyRelayRequestTimeout              SettingKey = "relay_request_timeout"                  // 非流式上游请求超时(秒)，0=不限制
 	SettingKeyJWTSecret                        SettingKey = "jwt_secret"                           // JWT 签名密钥（自动生成）
 	SettingKeyStatsSiteModelBackfilled         SettingKey = "stats_site_model_backfilled"          // 站点渠道小时聚合是否已回填历史日志
 	SettingKeyOutlierRetireEnabled             SettingKey = "outlier_retire_enabled"               // 被动离群退役(POR)总开关
@@ -74,6 +77,9 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeySSEPreStreamHeartbeatDelay, Value: "0"},       // 默认禁用 SSE 上游流建立前心跳
 		{Key: SettingKeyGroupHealthEnabled, Value: "false"},           // 默认不显示/运行分组健康检查，避免打扰主界面
 		{Key: SettingKeyProjectedChannelAutoGroupEnabled, Value: "0"}, // 默认不强制站点投影渠道自动分组
+		{Key: SettingKeyAutoGroupCreateMissingEnabled, Value: "false"}, // 默认不自动创建缺失对外分组
+		{Key: SettingKeyAutoGroupNormalizeEnabled, Value: "false"},     // 默认不归一化模型名
+		{Key: SettingKeyRelayRequestTimeout, Value: "0"},               // 默认非流式不设总超时（依赖客户端 context）
 		{Key: SettingKeyJWTSecret, Value: ""},                         // 为空时自动生成
 		{Key: SettingKeyStatsSiteModelBackfilled, Value: "false"},
 		{Key: SettingKeyOutlierRetireEnabled, Value: "false"}, // 默认关闭被动离群退役，保守上线
@@ -119,7 +125,7 @@ func (s *Setting) Validate() error {
 		SettingKeyWebDAVRetentionCount:
 		// 时间窗/样本/连击/间隔等：0 或负值无意义，下限为 1。
 		return validateIntMin(s.Value, 1)
-	case SettingKeySSEHeartbeatInterval, SettingKeySSEPreStreamHeartbeatDelay, SettingKeyWebDAVBackupInterval:
+	case SettingKeySSEHeartbeatInterval, SettingKeySSEPreStreamHeartbeatDelay, SettingKeyWebDAVBackupInterval, SettingKeyRelayRequestTimeout:
 		value, err := strconv.Atoi(s.Value)
 		if err != nil {
 			return fmt.Errorf("setting value must be an integer")
@@ -128,7 +134,7 @@ func (s *Setting) Validate() error {
 			return fmt.Errorf("setting value must be non-negative")
 		}
 		return nil
-	case SettingKeyRelayLogKeepEnabled, SettingKeyResponsesWSEnabled, SettingKeyGroupHealthEnabled, SettingKeyStatsSiteModelBackfilled, SettingKeyOutlierRetireEnabled, SettingKeyWebDAVIncludeStats:
+	case SettingKeyRelayLogKeepEnabled, SettingKeyResponsesWSEnabled, SettingKeyGroupHealthEnabled, SettingKeyStatsSiteModelBackfilled, SettingKeyOutlierRetireEnabled, SettingKeyWebDAVIncludeStats, SettingKeyAutoGroupCreateMissingEnabled, SettingKeyAutoGroupNormalizeEnabled:
 		if s.Value != "true" && s.Value != "false" {
 			return fmt.Errorf("setting value must be true or false")
 		}

@@ -37,19 +37,15 @@ func RegisterAfterAutoMigration(m Migration) {
 }
 
 func BeforeAutoMigrate(db *gorm.DB) error {
-	if err := runMigrationsWithRecord(db, beforeAutoMigrations); err != nil {
-		return err
-	}
-	beforeAutoMigrations = nil
-	return nil
+	// Keep the registry reusable: migration records are scoped to the target
+	// database, so a later database initialization must see the same list.
+	return runMigrationsWithRecord(db, beforeAutoMigrations)
 }
 
 func AfterAutoMigrate(db *gorm.DB) error {
-	if err := runMigrationsWithRecord(db, afterAutoMigrations); err != nil {
-		return err
-	}
-	afterAutoMigrations = nil
-	return nil
+	// Do not clear the process-wide registry; records decide whether each
+	// migration is already applied for this particular database.
+	return runMigrationsWithRecord(db, afterAutoMigrations)
 }
 
 func runMigrationsWithRecord(db *gorm.DB, migrations []Migration) error {

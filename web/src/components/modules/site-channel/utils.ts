@@ -363,6 +363,26 @@ export function hasSourceKeyChanges(
     return Boolean(payload.keys_to_add?.length || payload.keys_to_update?.length || payload.keys_to_delete?.length);
 }
 
+/** Build a source-key update payload that only adds one pasted token. */
+export function buildPasteSourceKeyPayload(
+    groupKey: string,
+    token: string,
+    name?: string,
+) {
+    const trimmedToken = token.trim();
+    const trimmedName = name?.trim() ?? '';
+    return {
+        group_key: groupKey,
+        keys_to_add: [
+            {
+                enabled: true,
+                token: trimmedToken,
+                ...(trimmedName ? { name: trimmedName } : {}),
+            },
+        ],
+    };
+}
+
 export function formatHistoryTime(value?: number | null) {
     if (!value) return '\u4ece\u672a\u8bf7\u6c42';
     const date = new Date(value * 1000);

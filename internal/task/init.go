@@ -11,19 +11,25 @@ import (
 )
 
 const (
-	TaskPriceUpdate       = "price_update"
-	TaskStatsSave         = "stats_save"
-	TaskRelayLogSave      = "relay_log_save"
-	TaskSyncLLM           = "sync_llm"
-	TaskCleanLLM          = "clean_llm"
-	TaskBaseUrlDelay      = "base_url_delay"
-	TaskSiteSync          = "site_sync"
-	TaskSiteCheckin       = "site_checkin"
-	TaskWSAffinityCleanup = "ws_affinity_cleanup"
-	TaskWebDAVBackup      = "webdav_backup"
+	TaskPriceUpdate        = "price_update"
+	TaskStatsSave          = "stats_save"
+	TaskRelayLogSave       = "relay_log_save"
+	TaskSyncLLM            = "sync_llm"
+	TaskCleanLLM           = "clean_llm"
+	TaskBaseUrlDelay       = "base_url_delay"
+	TaskSiteSync           = "site_sync"
+	TaskSiteSyncJobCleanup = "site_sync_job_cleanup"
+	TaskSiteCheckin        = "site_checkin"
+	TaskWSAffinityCleanup  = "ws_affinity_cleanup"
+	TaskWebDAVBackup       = "webdav_backup"
 )
 
 func Init() {
+	// Recover clearly abandoned jobs immediately, then keep checking because a
+	// recent job from the previous process may not become stale until later.
+	SiteSyncJobCleanupTask()
+	Register(TaskSiteSyncJobCleanup, 2*time.Minute, false, SiteSyncJobCleanupTask)
+
 	priceUpdateIntervalHours, err := op.SettingGetInt(model.SettingKeyModelInfoUpdateInterval)
 	if err != nil {
 		log.Errorf("failed to get model info update interval: %v", err)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/xuanli27/octopus/internal/model"
+	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/sitesync"
 )
 
@@ -50,6 +51,22 @@ func LastSyncAllTime() time.Time {
 
 func LastCheckinAllTime() time.Time {
 	return sitesync.LastCheckinAllTime()
+}
+
+func SiteSyncRuntimeStatus() sitesync.SiteSyncRuntimeStatus {
+	return sitesync.SiteSyncRuntimeStatusSnapshot()
+}
+
+func CreateSiteSyncJob(ctx context.Context, opts sitesync.SiteBatchOptions) (*model.SiteSyncJob, error) {
+	return sitesync.CreateSiteSyncJob(ctx, opts)
+}
+
+func SiteSyncJobList(ctx context.Context, limit int) ([]model.SiteSyncJob, error) {
+	return op.SiteSyncJobList(ctx, limit)
+}
+
+func SiteSyncJobGet(ctx context.Context, id int) (*model.SiteSyncJob, error) {
+	return op.SiteSyncJobGet(ctx, id)
 }
 
 func RefreshAccountRandomCheckinSchedule(ctx context.Context, accountID int) error {

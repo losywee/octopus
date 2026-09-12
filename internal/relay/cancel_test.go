@@ -135,3 +135,30 @@ func TestMetricsSuggestCompletedStream(t *testing.T) {
 		t.Fatalf("input without output should not suggest complete")
 	}
 }
+
+
+func TestIsFirstTokenTimeoutPreferredOverBareCancel(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errFirstTokenTimeout)
+	<-ctx.Done()
+
+	if isClientCancellation(ctx, context.Canceled) {
+		t.Fatalf("first-token timeout cause must not be classified as client cancellation")
+	}
+	if !isFirstTokenTimeout(ctx, context.Canceled) {
+		t.Fatalf("expected first-token timeout detection via context cause")
+	}
+}
+
+
+func TestIsRequestTimeoutNotClientCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errRequestTimeout)
+	<-ctx.Done()
+	if isClientCancellation(ctx, context.Canceled) {
+		t.Fatalf("request timeout must not be classified as client cancellation")
+	}
+	if !isRequestTimeout(ctx, context.Canceled) {
+		t.Fatalf("expected request timeout detection via context cause")
+	}
+}

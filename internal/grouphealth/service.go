@@ -11,6 +11,7 @@ import (
 
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
+	"github.com/xuanli27/octopus/internal/relay/balancer"
 	"gorm.io/gorm"
 )
 
@@ -202,6 +203,11 @@ func (s *Service) RunGroupHealth(ctx context.Context, groupID int, probeModes ..
 			return err
 		}
 
+		// C1: feed health probe outcomes into the runtime circuit breaker so
+		// failed candidates are skipped by the balancer until cooldown/probe recovery.
+		// Stats/relay logs remain untouched (health is synthetic traffic).
+		applyHealthOutcomeToCircuit(usedKey.ID, item, result)
+
 		if result.Success {
 			successFound = true
 			successCount++
@@ -256,6 +262,23 @@ func (s *Service) RunGroupHealth(ctx context.Context, groupID int, probeModes ..
 	finishedAt := time.Now()
 	durationMS := finishedAt.Sub(snapshot.StartedAt).Milliseconds()
 	return s.repo.FinishSnapshot(ctx, snapshot.ID, finalStatus, successfulChannelID, durationMS, message, finishedAt)
+}
+
+// applyHealthOutcomeToCircuit mirrors relay hard/soft failure semantics for health probes.
+func applyHealthOutcomeToCircuit(channelKeyID int, item model.GroupItem, result ProbeResult) {
+	if channelKeyID <= 0 || strings.TrimSpace(item.ModelName) == "" {
+		return
+	}
+	if result.Success {
+		balancer.RecordSuccess(item.ChannelID, channelKeyID, item.ModelName)
+		return
+	}
+	kind := balancer.FailureHard
+	status := result.HTTPStatus
+	if status == 429 || status == 503 {
+		kind = balancer.FailureSoftRateLimit
+	}
+	balancer.RecordFailure(item.ChannelID, channelKeyID, item.ModelName, kind)
 }
 
 func (s *Service) RunAllGroupHealth(ctx context.Context, maxConcurrency int, probeModes ...model.GroupHealthProbeMode) {

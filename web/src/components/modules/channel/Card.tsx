@@ -1,12 +1,14 @@
+import { useMemo } from 'react';
 import {
     MorphingDialog,
     MorphingDialogTrigger,
     MorphingDialogContainer,
     MorphingDialogContent,
 } from '@/components/ui/morphing-dialog';
-import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, XCircle } from 'lucide-react';
+import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, ShieldAlert, XCircle } from 'lucide-react';
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { type Channel, useEnableChannel } from '@/api/endpoints/channel';
+import { useRuntimeOverview } from '@/api/endpoints/runtime';
 import { CardContent } from './CardContent';
 import { useTranslations } from 'next-intl';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/animate-ui/components/animate/tooltip';
@@ -19,7 +21,16 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
     const tSections = useTranslations('channel.detail.sections');
     const tMetrics = useTranslations('channel.detail.metrics');
     const enableChannel = useEnableChannel();
+    const { data: runtime } = useRuntimeOverview(true);
     const isListLayout = layout === 'list';
+    const circuitCount = useMemo(
+        () => (runtime?.circuits ?? []).filter((c) => c.channel_id === channel.id && (c.state === 'open' || c.state === 'half_open')).length,
+        [runtime?.circuits, channel.id],
+    );
+    const health = useMemo(
+        () => (runtime?.channel_health ?? []).find((h) => h.channel_id === channel.id) ?? null,
+        [runtime?.channel_health, channel.id],
+    );
 
     const splitModels = (models: string) =>
         models
@@ -38,7 +49,11 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
             { id: channel.id, enabled: checked },
             {
                 onSuccess: () => {
-                    toast.success(checked ? t('toast.enabled') : t('toast.disabled'));
+                    toast.success(
+                        checked
+                            ? `${t('toast.enabled')} · 熔断/近1h状态将刷新`
+                            : t('toast.disabled'),
+                    );
                 },
                 onError: (error) => {
                     toast.error(error.message);
@@ -59,13 +74,28 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
                                 </TooltipTrigger>
                                 <TooltipContent key={channel.name}>{channel.name}</TooltipContent>
                             </Tooltip>
-                            {channel.managed ? (
-                                <div className="mt-1">
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {channel.managed ? (
                                     <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                                         站点投影
                                     </span>
-                                </div>
-                            ) : null}
+                                ) : null}
+                                {circuitCount > 0 ? (
+                                    <span title="该渠道当前处于熔断；编辑/启用后会自动清除" className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                        <ShieldAlert className="size-3" />
+                                        熔断 {circuitCount}
+                                    </span>
+                                ) : null}
+                                {health && health.fail_rate >= 20 ? (
+                                    <span title="近1小时失败率；更新渠道配置后该统计会清空重建" className="inline-flex rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                                        近1h {health.fail_rate.toFixed(0)}%
+                                    </span>
+                                ) : health && health.request_failed > 0 ? (
+                                    <span className="inline-flex rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+                                        近1h 失败 {health.request_failed}
+                                    </span>
+                                ) : null}
+                            </div>
                         </div>
                         <Switch
                             checked={channel.enabled}
